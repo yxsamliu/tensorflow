@@ -128,6 +128,7 @@ filegroup(
         "@org_python_pypi_backports_weakref//:LICENSE",
     ] + if_not_windows([
         "@nccl_archive//:LICENSE.txt",
+	"@rccl_archive//:LICENSE",
     ]) + tf_additional_license_deps(),
 )
 

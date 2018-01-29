@@ -598,6 +598,18 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
       repository = tf_repo_name,
   )
 
+  temp_workaround_http_archive(
+      name = "rccl_archive",
+      urls = [
+	  "https://github.com/ROCmSoftwarePlatform/rccl/archive/0.1.0.tar.gz",
+      ],
+      sha256 = "ba477caf3923bdd13b1e38bb01e5ddaeace67bd228e1dbd8784e4ba51571cac1",
+      strip_prefix = "rccl-0.1.0",
+      build_file = str(Label("//third_party:rccl.BUILD")),
+      repository = tf_repo_name,
+  )
+
+
   java_import_external(
       name = "junit",
       jar_sha256 = "59721f0805e223d84b90677887d9ff567dc534d7c502ca903c0c2b17f05c116a",
