@@ -464,9 +464,8 @@ bool ROCMExecutor::Memset(Stream *stream, DeviceMemoryBase *location,
   VLOG(2) << "enqueueing memset8 operation onto stream " << stream
           << " at location " << location << " with size " << size
           << " and pattern " << std::hex << pattern;
-  return ROCMDriver::AsynchronousMemsetUint8(
-      context_, AsROCmDevicePtr(location), pattern, size,
-      AsROCMStreamValue(stream));
+  return ROCMDriver::SynchronousMemsetUint8(
+      context_, AsROCmDevicePtr(location), pattern, size);
 }
 
 bool ROCMExecutor::Memset32(Stream *stream, DeviceMemoryBase *location,
@@ -476,32 +475,31 @@ bool ROCMExecutor::Memset32(Stream *stream, DeviceMemoryBase *location,
           << " and pattern " << std::hex << pattern;
   CHECK(reinterpret_cast<uintptr_t>(location->opaque()) % 4 == 0 &&
         size % 4 == 0);
-  return ROCMDriver::AsynchronousMemsetUint32(
-      context_, AsROCmDevicePtr(location), pattern, size / 4,
-      AsROCMStreamValue(stream));
+  return ROCMDriver::SynchronousMemsetUint32(
+      context_, AsROCmDevicePtr(location), pattern, size / 4);
 }
 
 bool ROCMExecutor::Memcpy(Stream *stream, void *host_dst,
                           const DeviceMemoryBase &gpu_src, uint64 size) {
-  return ROCMDriver::AsynchronousMemcpyD2H(context_, host_dst,
-                                           AsROCmDevicePtr(gpu_src), size,
-                                           AsROCMStreamValue(stream));
+  return (ROCMDriver::SynchronousMemcpyD2H(context_, host_dst,
+                                           AsROCmDevicePtr(gpu_src), size)
+          == port::Status::OK());
 }
 
 bool ROCMExecutor::Memcpy(Stream *stream, DeviceMemoryBase *gpu_dst,
                           const void *host_src, uint64 size) {
-  return ROCMDriver::AsynchronousMemcpyH2D(context_, AsROCmDevicePtr(gpu_dst),
-                                           host_src, size,
-                                           AsROCMStreamValue(stream));
+  return (ROCMDriver::SynchronousMemcpyH2D(context_, AsROCmDevicePtr(gpu_dst),
+                                           host_src, size)
+          == port::Status::OK());
 }
 
 bool ROCMExecutor::MemcpyDeviceToDevice(Stream *stream,
                                         DeviceMemoryBase *gpu_dst,
                                         const DeviceMemoryBase &gpu_src,
                                         uint64 size) {
-  return ROCMDriver::AsynchronousMemcpyD2D(context_, AsROCmDevicePtr(gpu_dst),
-                                           AsROCmDevicePtr(gpu_src), size,
-                                           AsROCMStreamValue(stream));
+  return (ROCMDriver::SynchronousMemcpyD2D(context_, AsROCmDevicePtr(gpu_dst),
+                                           AsROCmDevicePtr(gpu_src), size)
+          == port::Status::OK());
 }
 
 bool ROCMExecutor::HostCallback(Stream *stream,
