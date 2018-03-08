@@ -13,48 +13,48 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-
-#define EIGEN_USE_GPU
-
-#if TENSORFLOW_USE_ROCM
-#define EIGEN_USE_HIP
-#endif
-
-#include "tensorflow/core/kernels/sparse_xent_op.h"
-
-#include "tensorflow/core/framework/tensor_types.h"
-#include "tensorflow/core/platform/types.h"
-
-namespace tensorflow {
-
-typedef Eigen::GpuDevice GPUDevice;
-
-// Partial specialization for a GPUDevice, that uses the Eigen implementation
-// from XentEigenImpl.
-namespace functor {
-template <typename T, typename Index>
-struct SparseXentFunctor<GPUDevice, T, Index> {
-  void operator()(const GPUDevice& d, typename TTypes<T>::ConstMatrix logits,
-                  typename TTypes<Index>::ConstVec labels,
-                  typename TTypes<T>::Vec scratch, typename TTypes<T>::Vec loss,
-                  typename TTypes<T>::Matrix backprop) {
-    SparseXentEigenImpl<GPUDevice, T, Index>::Compute(d, logits, labels,
-                                                      scratch, loss, backprop);
-  }
-};
-}  // end namespace functor
-
-// Instantiate the GPU implementation for float.
-#define REGISTER(Index)                                                      \
-  template struct functor::SparseXentFunctor<GPUDevice, float, Index>;       \
-  template class generator::SparseXentGradGenerator<float, Index>;           \
-  template struct functor::SparseXentFunctor<GPUDevice, Eigen::half, Index>; \
-  template class generator::SparseXentGradGenerator<Eigen::half, Index>;
-REGISTER(int32)
-REGISTER(int64)
-#undef REGISTER
-
-}  // end namespace tensorflow
-
-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+//#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+//
+//#define EIGEN_USE_GPU
+//
+//#if TENSORFLOW_USE_ROCM
+//#define EIGEN_USE_HIP
+//#endif
+//
+//#include "tensorflow/core/kernels/sparse_xent_op.h"
+//
+//#include "tensorflow/core/framework/tensor_types.h"
+//#include "tensorflow/core/platform/types.h"
+//
+//namespace tensorflow {
+//
+//typedef Eigen::GpuDevice GPUDevice;
+//
+//// Partial specialization for a GPUDevice, that uses the Eigen implementation
+//// from XentEigenImpl.
+//namespace functor {
+//template <typename T, typename Index>
+//struct SparseXentFunctor<GPUDevice, T, Index> {
+//  void operator()(const GPUDevice& d, typename TTypes<T>::ConstMatrix logits,
+//                  typename TTypes<Index>::ConstVec labels,
+//                  typename TTypes<T>::Vec scratch, typename TTypes<T>::Vec loss,
+//                  typename TTypes<T>::Matrix backprop) {
+//    SparseXentEigenImpl<GPUDevice, T, Index>::Compute(d, logits, labels,
+//                                                      scratch, loss, backprop);
+//  }
+//};
+//}  // end namespace functor
+//
+//// Instantiate the GPU implementation for float.
+//#define REGISTER(Index)                                                      \
+//  template struct functor::SparseXentFunctor<GPUDevice, float, Index>;       \
+//  template class generator::SparseXentGradGenerator<float, Index>;           \
+//  template struct functor::SparseXentFunctor<GPUDevice, Eigen::half, Index>; \
+//  template class generator::SparseXentGradGenerator<Eigen::half, Index>;
+//REGISTER(int32)
+//REGISTER(int64)
+//#undef REGISTER
+//
+//}  // end namespace tensorflow
+//
+//#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
