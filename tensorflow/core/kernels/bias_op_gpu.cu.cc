@@ -213,7 +213,7 @@ void BiasGradGPU<T>::compute(const GPUDevice& d, const T* output_backprop,
     shared_memory_size = bias_size * sizeof(typename AccumulatorType<T>::type);
   }
   // Check if we have enough shared memory.
-  if (shared_memory_size <= max_shared_memory_size) {
+  if (false) {
     if (data_format == FORMAT_NHWC) {
       GPU_LAUNCH_KERNEL(BiasGradNHWC_SharedAtomics<T>,
           dim3(config.block_count), dim3(config.thread_per_block),
