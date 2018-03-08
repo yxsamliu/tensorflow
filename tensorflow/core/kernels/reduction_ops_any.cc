@@ -24,13 +24,13 @@ REGISTER_KERNEL_BUILDER(
         .HostMemory("reduction_indices"),
     ReductionOp<CPUDevice, bool, Eigen::internal::OrReducer>);
 
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-REGISTER_KERNEL_BUILDER(
-    Name("Any")
-        .TypeConstraint<int32>("Tidx")
-        .Device(DEVICE_GPU)
-        .HostMemory("reduction_indices"),
-    ReductionOp<GPUDevice, bool, Eigen::internal::OrReducer>);
-#endif
+//#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+//REGISTER_KERNEL_BUILDER(
+//    Name("Any")
+//        .TypeConstraint<int32>("Tidx")
+//        .Device(DEVICE_GPU)
+//        .HostMemory("reduction_indices"),
+//    ReductionOp<GPUDevice, bool, Eigen::internal::OrReducer>);
+//#endif
 
 }  // namespace tensorflow

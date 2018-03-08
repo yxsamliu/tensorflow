@@ -27,22 +27,22 @@ namespace tensorflow {
 TF_CALL_NUMBER_TYPES(REGISTER_CPU_KERNELS);
 #undef REGISTER_CPU_KERNELS
 
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-
-#define REGISTER_GPU_KERNELS(type)          \
-  REGISTER_KERNEL_BUILDER(                  \
-      Name("Mean")                          \
-          .Device(DEVICE_GPU)               \
-          .TypeConstraint<type>("T")        \
-          .TypeConstraint<int32>("Tidx")    \
-          .HostMemory("reduction_indices"), \
-      ReductionOp<GPUDevice, type, Eigen::internal::MeanReducer<type>>);
-TF_CALL_GPU_NUMBER_TYPES(REGISTER_GPU_KERNELS);
-TF_CALL_complex64(REGISTER_GPU_KERNELS);
-TF_CALL_complex128(REGISTER_GPU_KERNELS);
-#undef REGISTER_GPU_KERNELS
-
-#endif
+//#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+//
+//#define REGISTER_GPU_KERNELS(type)          \
+//  REGISTER_KERNEL_BUILDER(                  \
+//      Name("Mean")                          \
+//          .Device(DEVICE_GPU)               \
+//          .TypeConstraint<type>("T")        \
+//          .TypeConstraint<int32>("Tidx")    \
+//          .HostMemory("reduction_indices"), \
+//      ReductionOp<GPUDevice, type, Eigen::internal::MeanReducer<type>>);
+//TF_CALL_GPU_NUMBER_TYPES(REGISTER_GPU_KERNELS);
+//TF_CALL_complex64(REGISTER_GPU_KERNELS);
+//TF_CALL_complex128(REGISTER_GPU_KERNELS);
+//#undef REGISTER_GPU_KERNELS
+//
+//#endif
 
 #ifdef TENSORFLOW_USE_SYCL
 #define REGISTER_SYCL_KERNELS(type)         \
