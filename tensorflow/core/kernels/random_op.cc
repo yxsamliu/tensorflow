@@ -501,56 +501,56 @@ TF_CALL_int64(REGISTER_INT);
 #undef REGISTER
 #undef REGISTER_INT
 
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-
-#define REGISTER(TYPE)                                              \
-  REGISTER_KERNEL_BUILDER(                                          \
-      Name("RandomUniform")                                         \
-          .Device(DEVICE_GPU)                                       \
-          .HostMemory("shape")                                      \
-          .TypeConstraint<int32>("T")                               \
-          .TypeConstraint<TYPE>("dtype"),                           \
-      PhiloxRandomOp<GPUDevice, random::UniformDistribution<        \
-                                    random::PhiloxRandom, TYPE> >); \
-  REGISTER_KERNEL_BUILDER(                                          \
-      Name("RandomStandardNormal")                                  \
-          .Device(DEVICE_GPU)                                       \
-          .HostMemory("shape")                                      \
-          .TypeConstraint<int32>("T")                               \
-          .TypeConstraint<TYPE>("dtype"),                           \
-      PhiloxRandomOp<GPUDevice, random::NormalDistribution<         \
-                                    random::PhiloxRandom, TYPE> >); \
-  REGISTER_KERNEL_BUILDER(                                          \
-      Name("TruncatedNormal")                                       \
-          .Device(DEVICE_GPU)                                       \
-          .HostMemory("shape")                                      \
-          .TypeConstraint<int32>("T")                               \
-          .TypeConstraint<TYPE>("dtype"),                           \
-      PhiloxRandomOp<                                               \
-          GPUDevice,                                                \
-          random::TruncatedNormalDistribution<                      \
-              random::SingleSampleAdapter<random::PhiloxRandom>, TYPE> >);
-
-#define REGISTER_INT(IntType)                                   \
-  REGISTER_KERNEL_BUILDER(Name("RandomUniformInt")              \
-                              .Device(DEVICE_GPU)               \
-                              .HostMemory("shape")              \
-                              .HostMemory("minval")             \
-                              .HostMemory("maxval")             \
-                              .TypeConstraint<int32>("T")       \
-                              .TypeConstraint<IntType>("Tout"), \
-                          RandomUniformIntOp<GPUDevice, IntType>);
-
-TF_CALL_half(REGISTER);
-TF_CALL_float(REGISTER);
-TF_CALL_double(REGISTER);
-TF_CALL_int32(REGISTER_INT);
-TF_CALL_int64(REGISTER_INT);
-
-#undef REGISTER
-#undef REGISTER_INT
-
-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+//#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+//
+//#define REGISTER(TYPE)                                              \
+//  REGISTER_KERNEL_BUILDER(                                          \
+//      Name("RandomUniform")                                         \
+//          .Device(DEVICE_GPU)                                       \
+//          .HostMemory("shape")                                      \
+//          .TypeConstraint<int32>("T")                               \
+//          .TypeConstraint<TYPE>("dtype"),                           \
+//      PhiloxRandomOp<GPUDevice, random::UniformDistribution<        \
+//                                    random::PhiloxRandom, TYPE> >); \
+//  REGISTER_KERNEL_BUILDER(                                          \
+//      Name("RandomStandardNormal")                                  \
+//          .Device(DEVICE_GPU)                                       \
+//          .HostMemory("shape")                                      \
+//          .TypeConstraint<int32>("T")                               \
+//          .TypeConstraint<TYPE>("dtype"),                           \
+//      PhiloxRandomOp<GPUDevice, random::NormalDistribution<         \
+//                                    random::PhiloxRandom, TYPE> >); \
+//  REGISTER_KERNEL_BUILDER(                                          \
+//      Name("TruncatedNormal")                                       \
+//          .Device(DEVICE_GPU)                                       \
+//          .HostMemory("shape")                                      \
+//          .TypeConstraint<int32>("T")                               \
+//          .TypeConstraint<TYPE>("dtype"),                           \
+//      PhiloxRandomOp<                                               \
+//          GPUDevice,                                                \
+//          random::TruncatedNormalDistribution<                      \
+//              random::SingleSampleAdapter<random::PhiloxRandom>, TYPE> >);
+//
+//#define REGISTER_INT(IntType)                                   \
+//  REGISTER_KERNEL_BUILDER(Name("RandomUniformInt")              \
+//                              .Device(DEVICE_GPU)               \
+//                              .HostMemory("shape")              \
+//                              .HostMemory("minval")             \
+//                              .HostMemory("maxval")             \
+//                              .TypeConstraint<int32>("T")       \
+//                              .TypeConstraint<IntType>("Tout"), \
+//                          RandomUniformIntOp<GPUDevice, IntType>);
+//
+//TF_CALL_half(REGISTER);
+//TF_CALL_float(REGISTER);
+//TF_CALL_double(REGISTER);
+//TF_CALL_int32(REGISTER_INT);
+//TF_CALL_int64(REGISTER_INT);
+//
+//#undef REGISTER
+//#undef REGISTER_INT
+//
+//#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 
 #ifdef TENSORFLOW_USE_SYCL
 
