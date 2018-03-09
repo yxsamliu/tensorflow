@@ -590,7 +590,9 @@ ROCMDriver::ContextGetSharedMemConfig(ROCmContext* context) {
                                                       size_t uint32_count,
                                                       hipStream_t stream) {
   ScopedActivateContext activation{context};
-  hipError_t res = hipMemsetAsync(location, value, uint32_count, stream);
+  // XXX use sync hipMemset
+  //hipError_t res = hipMemsetAsync(location, value, uint32_count, stream);
+  hipError_t res = hipMemset(location, value, uint32_count);
   if (res != hipSuccess) {
     LOG(ERROR) << "failed to enqueue async memset operation: " << ToString(res);
     return false;
@@ -611,8 +613,11 @@ ROCMDriver::ContextGetSharedMemConfig(ROCmContext* context) {
   unsigned char valueC = static_cast<unsigned char>(value);
   uint32_t value32 = (valueC << 24) | (valueC << 16) | (valueC << 8) | (valueC) ;
   assert (value32 == value); // if mismatch this indicates case where hipMemsetAsyc can't emulate hipMemSetD32
+  // XXX use sync hipMemset
+  //hipError_t res =
+  //    hipMemsetAsync(pointer, value, uint32_count*4, stream);
   hipError_t res =
-      hipMemsetAsync(pointer, value, uint32_count*4, stream);
+      hipMemset(pointer, value, uint32_count*4);
   if (res != hipSuccess) {
     LOG(ERROR) << "failed to enqueue async memset operation: " << ToString(res);
     return false;
