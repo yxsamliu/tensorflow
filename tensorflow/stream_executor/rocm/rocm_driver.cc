@@ -1041,7 +1041,10 @@ ROCMDriver::ContextGetSharedMemConfig(ROCmContext* context) {
                                                     uint64 size,
                                                     hipStream_t stream) {
   ScopedActivateContext activation{context};
-  hipError_t result = hipMemcpyDtoDAsync(gpu_dst, gpu_src, size, stream);
+
+  hipError_t result;
+
+  result = hipMemcpyDtoDAsync(gpu_dst, gpu_src, size, stream);
   if (result != hipSuccess) {
     LOG(ERROR) << port::Printf(
         "failed to enqueue async memcpy from device to device: %s"
@@ -1057,6 +1060,58 @@ ROCMDriver::ContextGetSharedMemConfig(ROCmContext* context) {
 
     return false;
   }
+
+  // Additional cross device synchronization
+  //
+  // Due to memory hierachy in AMD GPU, need to submit additional sync event
+  // - On the sender GPU : system scope release fence
+  // - On the receiving GPU : system scope acquire fence
+  hipPointerAttribute_t src_attrs, dst_attrs;
+  hipPointerGetAttributes(&src_attrs, gpu_src);
+  hipPointerGetAttributes(&dst_attrs, gpu_dst);
+  bool is_cross_device_copy = (src_attrs.device != dst_attrs.device);
+
+  if (is_cross_device_copy) {
+    hipEvent_t cross_device_sync_event;
+    result = hipEventCreateWithFlags(&cross_device_sync_event, hipEventReleaseToSystem);
+    if (result != hipSuccess) {
+      LOG(ERROR) << "failed to allocate D2D copy sync event";
+      return false;
+    }
+
+    result = hipEventRecord(cross_device_sync_event, stream);
+    if (result != hipSuccess) {
+      LOG(ERROR) << "failed to wait on sender GPU stream";
+      return false;
+    }
+
+    result = hipSetDevice(dst_attrs.device);
+    if (result != hipSuccess) {
+      LOG(ERROR) << "failed to switch to receiver GPU";
+      return false;
+    }
+
+    // cross_device_sync_event is created with release to system bit
+    // in HCC runtime acquire to system bit will be set as well
+    result = hipStreamWaitEvent(nullptr, cross_device_sync_event, 0);
+    if (result != hipSuccess) {
+      LOG(ERROR) << "failed to wait on receiver GPU stream";
+      return false;
+    }
+
+    result = hipSetDevice(src_attrs.device);
+    if (result != hipSuccess) {
+      LOG(ERROR) << "failed to switch back to sender GPU";
+      return false;
+    }
+
+    result = hipEventDestroy(cross_device_sync_event);
+    if (result != hipSuccess) {
+      LOG(ERROR) << "failed to release D2D copy sync event";
+      return false;
+    }
+  }
+
   VLOG(2) << "successfully enqueued async memcpy d2d of " << size << " bytes";
   return true;
 }
