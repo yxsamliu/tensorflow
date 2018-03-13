@@ -1081,7 +1081,7 @@ ROCMDriver::ContextGetSharedMemConfig(ROCmContext* context) {
 
     result = hipEventRecord(cross_device_sync_event, stream);
     if (result != hipSuccess) {
-      LOG(ERROR) << "failed to wait on sender GPU stream";
+      LOG(ERROR) << "failed to post event on sender GPU stream";
       return false;
     }
 
@@ -1095,13 +1095,19 @@ ROCMDriver::ContextGetSharedMemConfig(ROCmContext* context) {
     // in HCC runtime acquire to system bit will be set as well
     result = hipStreamWaitEvent(nullptr, cross_device_sync_event, 0);
     if (result != hipSuccess) {
-      LOG(ERROR) << "failed to wait on receiver GPU stream";
+      LOG(ERROR) << "failed to wait event on receiver GPU stream";
       return false;
     }
 
     result = hipSetDevice(src_attrs.device);
     if (result != hipSuccess) {
       LOG(ERROR) << "failed to switch back to sender GPU";
+      return false;
+    }
+
+    result = hipEventSynchronize(cross_device_sync_event);
+    if (result != hipSuccess) {
+      LOG(ERROR) << "failed to wait event on sender GPU stream";
       return false;
     }
 
