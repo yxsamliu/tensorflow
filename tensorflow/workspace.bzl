@@ -656,6 +656,16 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
       build_file = str(Label("//third_party:cub.BUILD")),
   )
 
+  native.new_http_archive(
+      name = "rocPRIM_archive",
+      urls = [
+          "https://github.com/ROCmSoftwarePlatform/rocPRIM/archive/v0.3.0.zip",
+      ],
+      sha256 = "19659b7bde2cd5c4ebfdb9c85c915fd6739daed22f0d91cb821ce29e4bc0257b",
+      strip_prefix = "rocPRIM-0.3.0",
+      build_file = str(Label("//third_party:rocprim.BUILD")),
+  )
+
   native.bind(
       name = "cub",
       actual = "@cub_archive//:cub",
