@@ -1931,8 +1931,11 @@ bool MIOpenSupport::DoConvolve(
     DeviceMemory<Eigen::half>* output_data, ScratchAllocator* scratch_allocator,
     const dnn::AlgorithmConfig& algorithm_config,
     dnn::ProfileResult* output_profile_result) {
-  LOG(ERROR) << "miopen does not support halt type yet";
-  return false;
+  return DoConvolveImpl<Eigen::half>(
+      stream, miopenHalf, batch_descriptor, input_data, filter_descriptor,
+      filter_data, convolution_descriptor, biases, activation_mode,
+      output_descriptor, output_data, scratch_allocator, algorithm_config,
+      output_profile_result);
 }
 
 bool MIOpenSupport::DoConvolve(
@@ -1945,8 +1948,11 @@ bool MIOpenSupport::DoConvolve(
     DeviceMemory<Eigen::half>* output_data, ScratchAllocator* scratch_allocator,
     const dnn::AlgorithmConfig& algorithm_config,
     dnn::ProfileResult* output_profile_result) {
-  LOG(ERROR) << "miopen does not support halt type yet";
-  return false;
+  return DoConvolveImpl<Eigen::half>(
+      stream, miopenHalf, batch_descriptor, input_data, filter_descriptor,
+      filter_data, convolution_descriptor, /*biases=*/nullptr,
+      dnn::ActivationMode::kNone, output_descriptor, output_data,
+      scratch_allocator, algorithm_config, output_profile_result);
 }
 
 template<class T>
@@ -2218,8 +2224,11 @@ bool MIOpenSupport::DoConvolveBackwardData(
     ScratchAllocator* scratch_allocator,
     const dnn::AlgorithmConfig& algorithm_config,
     dnn::ProfileResult* output_profile_result) {
-  LOG(ERROR) << "miopen does not support half type yet";
-  return false;
+  return DoConvolveBackwardDataImpl(
+      stream, miopenHalf, filter_descriptor, filter_data,
+      output_descriptor_in, backward_output_data, convolution_descriptor,
+      input_descriptor, backward_input_data, scratch_allocator,
+      algorithm_config, output_profile_result);
 }
 
 template <class T>
@@ -2418,8 +2427,11 @@ bool MIOpenSupport::DoConvolveBackwardFilter(
     ScratchAllocator* scratch_allocator,
     const dnn::AlgorithmConfig& algorithm_config,
     dnn::ProfileResult* output_profile_result) {
-  LOG(ERROR) << "miopen does not support half type yet";
-  return false;
+  return DoConvolveBackwardFilterImpl(
+      stream, miopenHalf, input_descriptor, input_data,
+      output_descriptor_in, backward_output_data, convolution_descriptor,
+      filter_descriptor, backward_filter_data, scratch_allocator,
+      algorithm_config, output_profile_result);
 }
 
 template <class T>
@@ -2482,8 +2494,9 @@ bool MIOpenSupport::DoConvolveBackwardBias(
     const DeviceMemory<Eigen::half>& input_data,
     const BatchDescriptor& bias_descriptor,
     DeviceMemory<Eigen::half>* backward_bias_data) {
-  LOG(ERROR) << "miopen does not support half type yet";
-  return false;
+  return DoConvolveBackwardBiasImpl(stream, miopenHalf, input_descriptor,
+                                    input_data, bias_descriptor,
+                                    backward_bias_data);
 }
 
 bool MIOpenSupport::DoMatMul(Stream* stream,
@@ -2762,8 +2775,56 @@ bool MIOpenSupport::DoPoolForward(
     const dnn::BatchDescriptor& output_dimensions,
     DeviceMemory<Eigen::half>* output_data,
     ScratchAllocator* workspace_allocator) {
-  LOG(ERROR) << "miopen does not support half type yet";
-  return false;
+  mutex_lock lock{dnn_handle_mutex_};
+  auto status = wrap::miopenSetStream(parent_, ToHandle(dnn_handle_),
+                                     AsROCMStreamValue(stream));
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "failed to set stream for miopen handle: " << ToString(status);
+    return false;
+  }
+
+  // Alpha is the scaling factor for input.
+  float alpha = 1.0;
+  // Beta is the scaling factor for output.
+  float beta = 0.0;
+
+  ScopedTensorDescriptor src_desc{parent_, input_dimensions, miopenHalf};
+  ScopedTensorDescriptor dest_desc{parent_, output_dimensions,
+                                   miopenHalf};
+  ScopedPoolingDescriptor pooling_desc{parent_, pooling_dimensions};
+
+  DeviceMemory<uint8> workspace;
+  size_t workspace_size_in_bytes = 0;
+  status = wrap::miopenPoolingGetWorkSpaceSize(parent_, dest_desc.handle(),
+                                                  &workspace_size_in_bytes);
+
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "failed to obtain workspace size for pooling on stream: "
+               << ToString(status);
+    return false;
+  }
+
+  // Allocate the workspace.
+  if (workspace_size_in_bytes > 0) {
+    assert(workspace_allocator);
+    auto allocated =
+        workspace_allocator->AllocateBytes(stream, workspace_size_in_bytes);
+    if (!allocated.ok() || (workspace = allocated.ValueOrDie()) == nullptr) {
+      LOG(ERROR) << "Failed to allocate pooling workspace";
+      return false;
+    }
+  }
+
+  status = wrap::miopenPoolingForward(
+      parent_, ToHandle(dnn_handle_), pooling_desc.handle(), &alpha,
+      src_desc.handle(), input_data.opaque(), &beta, dest_desc.handle(),
+      output_data->opaque(), true, workspace.opaque(), workspace_size_in_bytes);
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "failed to enqueue forward pooling on stream: "
+               << ToString(status);
+    return false;
+  }
+  return true;
 }
 
 bool MIOpenSupport::DoPoolBackward(
@@ -2888,8 +2949,95 @@ bool MIOpenSupport::DoPoolBackward(
     const DeviceMemory<Eigen::half>& input_diff_data,
     DeviceMemory<Eigen::half>* output_diff_data,
     ScratchAllocator* workspace_allocator) {
-  LOG(ERROR) << "miopen does not support half type yet";
-  return false;
+  mutex_lock lock{dnn_handle_mutex_};
+  auto status = wrap::miopenSetStream(parent_, ToHandle(dnn_handle_),
+                                     AsROCMStreamValue(stream));
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "failed to set stream for miopen handle: " << ToString(status);
+    return false;
+  }
+
+  // Alpha is the scaling factor for input.
+  float alpha = 1.0;
+  // Beta is the scaling factor for output.
+  float beta = 0.0;
+
+  ScopedTensorDescriptor src_desc{parent_, input_dimensions, miopenHalf};
+  ScopedTensorDescriptor dest_desc{parent_, output_dimensions,
+                                   miopenHalf};
+  ScopedPoolingDescriptor pooling_desc{parent_, pooling_dimensions};
+
+  DeviceMemory<uint8> workspace;
+  size_t workspace_size_in_bytes = 0;
+  status = wrap::miopenPoolingGetWorkSpaceSize(parent_, dest_desc.handle(),
+                                                  &workspace_size_in_bytes);
+
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "failed to obtain workspace size for backward pooling on stream: "
+               << ToString(status);
+    return false;
+  }
+
+  // Allocate the workspace.
+  if (workspace_size_in_bytes > 0) {
+    assert(workspace_allocator);
+    auto allocated =
+        workspace_allocator->AllocateBytes(stream, workspace_size_in_bytes);
+    if (!allocated.ok() || (workspace = allocated.ValueOrDie()) == nullptr) {
+      LOG(ERROR) << "Failed to allocate backward pooling workspace";
+      return false;
+    }
+  }
+
+  DeviceMemory<uint8> dest2; // duplicated dest from forward:
+  int dest2_size = 0;
+
+  // miopen requires the strides and dims to be ordered as BDYX.
+  std::vector<int64> dims64 =
+      output_dimensions.full_dims(dnn::DataLayout::kBatchDepthYX);
+
+  // miopen does not use strides and must have 4D tensor.
+  std::vector<int> dims(4);
+
+  std::transform(dims64.cbegin(), dims64.cend(), dims.begin(),
+                 &CheckedNarrowing<int64, int>);
+
+  dest2_size = dims[0] * dims[1] * dims[2] * dims[3] * sizeof(miopenHalf); 
+
+  if (dest2_size > 0) {
+    assert(workspace_allocator);
+    auto allocated = workspace_allocator->AllocateBytes(stream, dest2_size);
+    if (!allocated.ok() || (dest2 = allocated.ValueOrDie()) == nullptr) {
+      LOG(ERROR) << "Failed to allocate backward pooling workspace";
+      return false;
+    }
+  } else {
+    LOG(ERROR) << "Failed to calcuate tensor size to chain forward and backward pooling";
+  }
+
+  status = wrap::miopenPoolingForward(
+      parent_, ToHandle(dnn_handle_), pooling_desc.handle(), &alpha,
+      src_desc.handle(), input_data.opaque(), &beta, dest_desc.handle(),
+      dest2.opaque(), true, workspace.opaque(), workspace_size_in_bytes);
+
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "failed to enqueue forward pooling (before backward) on stream: "
+               << ToString(status);
+    return false;
+  }
+ 
+  status = wrap::miopenPoolingBackward(
+      parent_, ToHandle(dnn_handle_), pooling_desc.handle(), &alpha,
+      dest_desc.handle(), dest2.opaque(), dest_desc.handle(),
+      input_diff_data.opaque(), src_desc.handle(), input_data.opaque(), &beta,
+      src_desc.handle(), output_diff_data->opaque(), workspace.opaque());
+
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "failed to enqueue backward pooling on stream: "
+               << ToString(status);
+    return false;
+  }
+  return true;
 }
 
 bool MIOpenSupport::DoNormalize(
