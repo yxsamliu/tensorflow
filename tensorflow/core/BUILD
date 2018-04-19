@@ -229,7 +229,7 @@ cc_library(
         "platform/protobuf.h",
         "platform/types.h",
     ] + glob(tf_additional_proto_hdrs()) + glob(tf_env_time_hdrs()),
-    copts = tf_copts(),
+    copts = tf_copts() + ["-g", "-Og", ],
     deps = tf_lib_proto_parsing_deps(),
 )
 
@@ -698,6 +698,7 @@ tf_gpu_library(
         "public/session_options.h",
     ],
     visibility = ["//visibility:public"],
+    copts = tf_copts() + ["-g", "-Og", ],
     deps = [
         ":core_cpu_internal",
     ],
@@ -1490,7 +1491,7 @@ tf_gpu_library(
         "util/tensor_slice_set.h",
         "util/tensor_slice_util.h",
     ],
-    copts = tf_copts(),
+    copts = tf_copts() + ["-g", "-Og", ],
     linkopts = select({
         "//tensorflow:freebsd": [],
         "//conditions:default": ["-ldl"],
@@ -1608,7 +1609,7 @@ tf_gpu_library(
         "public/version.h",
     ],
     hdrs = CORE_CPU_BASE_HDRS,
-    copts = tf_copts(),
+    copts = tf_copts() + ["-g", "-Og", ],
     deps = [
         ":framework",
         ":framework_internal",
@@ -1662,6 +1663,7 @@ tf_gpu_library(
         "graph/gradients.cc",
         "graph/mkl_layout_pass.cc",
         "graph/mkl_tfconversion_pass.cc",
+        "graph/rocm/rocm_pass.cc",
         "graph/quantize_training.cc",
         "public/session.h",
         "public/session_options.h",
@@ -1702,7 +1704,7 @@ tf_gpu_library(
         "graph/gradients.h",
         "graph/quantize_training.h",
     ],
-    copts = tf_copts(),
+    copts = tf_copts() + ["-g", "-Og", ],
     deps = [
                ":core_cpu_base",
                ":framework",
@@ -1746,7 +1748,7 @@ tf_gpu_library(
         "common_runtime/direct_session.h",
         "util/env_var.h",
     ],
-    copts = tf_copts(),
+    copts = tf_copts() + ["-g", "-Og", ],
     gpu_deps = [
     ],
     linkstatic = 1,
@@ -1767,7 +1769,7 @@ cc_library(
     name = "example_parser_configuration",
     srcs = ["example/example_parser_configuration.cc"],
     hdrs = ["example/example_parser_configuration.h"],
-    copts = tf_copts(),
+    copts = tf_copts() + ["-g", "-Og", ],
     linkstatic = 1,
     visibility = ["//visibility:public"],
     deps = [
@@ -1806,7 +1808,7 @@ tf_gpu_library(
         "common_runtime/gpu/pool_allocator.h",
         "common_runtime/gpu/process_state.h",
     ],
-    copts = tf_copts(),
+    copts = tf_copts() + ["-g", "-Og", ],
     linkstatic = 1,
     deps = [
         ":core_cpu",
@@ -1832,7 +1834,7 @@ tf_gpu_library(
     hdrs = [
         "common_runtime/gpu/gpu_init.h",
     ],
-    copts = tf_copts(),
+    copts = tf_copts() + ["-g", "-Og", ],
     linkstatic = 1,
     deps = [
         ":framework",
@@ -1858,7 +1860,7 @@ cc_library(
         "common_runtime/sycl/sycl_util.h",
         "common_runtime/sycl/sycl_device_context.h",
     ]),
-    copts = tf_copts(),
+    copts = tf_copts() + ["-g", "-Og", ],
     linkstatic = 0,
     deps = [
         ":core_cpu",
@@ -2954,7 +2956,7 @@ cc_library(
     name = "rocm_rocdl_path",
     srcs = ["platform/rocm_rocdl_path.cc"] + tf_additional_rocdl_srcs(),
     hdrs = ["platform/rocm_rocdl_path.h"],
-    copts = tf_copts(),
+    copts = tf_copts() + ["-g", "-Og", ],
     data = tf_additional_rocdl_data(),
     visibility = ["//visibility:public"],
     deps = [
