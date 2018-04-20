@@ -1,4 +1,4 @@
-/* 2018 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,17 +14,21 @@ limitations under the License.
 ==============================================================================*/
 
 #ifdef TENSORFLOW_USE_ROCM
-#ifndef TENSORFLOW_RTGLIB_CONVERT_GRAPH_
-#define TENSORFLOW_RTGLIB_CONVERT_GRAPH_
+#ifndef TENSORFLOW_RTGLIB_DUMP_GRAPH_
+#define TENSORFLOW_RTGLIB_DUMP_GRAPH_
+
+#include "tensorflow/core/framework/graph.pb.h"
+#include "tensorflow/core/graph/graph.h"
 
 namespace tensorflow {
 namespace rtglib {
-namespace convert {
-Status ConvertGraphToRTG(std::unique_ptr<Graph>* graph);
-    
-} // namspace convert
+namespace dump_graph {
+void DumpGraphDefToFile(const string& name, const GraphDef& graph_def);
+void DumpGraphToFile(const string& name, const Graph& graph); 
+                          
+} // namespace dump_graph
 } // namespace rtglib
 } // namespace tensorflow
 
+#endif // TENSORFLOW_RTGLIB_DUMP_GRAPH_
 #endif // TENSORFLOW_USE_ROCM
-#endif // TENSORFLOW_RTGLIB_CONVERT_GRAPH_

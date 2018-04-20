@@ -1663,6 +1663,8 @@ tf_gpu_library(
         "graph/gradients.cc",
         "graph/mkl_layout_pass.cc",
         "graph/mkl_tfconversion_pass.cc",
+        "graph/rocm/convert_graph.cc",
+        "graph/rocm/dump_graph.cc",
         "graph/rocm/rocm_pass.cc",
         "graph/quantize_training.cc",
         "public/session.h",
@@ -1703,6 +1705,8 @@ tf_gpu_library(
         "common_runtime/visitable_allocator.h",
         "graph/gradients.h",
         "graph/quantize_training.h",
+        "graph/rocm/convert_graph.h",
+        "graph/rocm/dump_graph.h",
     ],
     copts = tf_copts() + ["-g", "-Og", ],
     deps = [

@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,8 +17,7 @@ limitations under the License.
 
 #include "tensorflow/core/common_runtime/optimization_registry.h"
 #include "tensorflow/core/graph/algorithm.h"
-#include "tensorflow/core/graph/graph.h"
-#include "tensorflow/core/lib/core/status.h"
+#include "convert_graph.h"
 
 namespace tensorflow {
 class ROCmPass : public GraphOptimizationPass {
@@ -38,14 +37,21 @@ Status ROCmPass::Run(
     if (options.graph == nullptr && options.partition_graphs == nullptr) {
         return Status::OK();
     }
+    auto convertGraph = [&](std::unique_ptr<Graph>* g) {
+        // Get the ownership of a graph
+        std::unique_ptr<Graph>* ng = std::move(g);
+        tensorflow::rtglib::convert::ConvertGraphToRTG(ng);
+        // Return the ownership of a graph back
+        g->reset(ng->release());
+    };
     if (kROCmPassGroup != OptimizationPassRegistry::POST_PARTITIONING) {
         // For any pre-partitioning phase, a graph is stored in options.graph.
-        /// ConvertGraphToRTG(options.graph);
+        convertGraph(options.graph);
     } else {
         // For post partitioning phase, graphs are stored in
         // options.partition_graphs.
         for (auto& pg : *options.partition_graphs) {
-            // ConvertGraphToRTG(&pg.second);
+            convertGraph(&pg.second);
         }
     }
     

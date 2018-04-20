@@ -14,17 +14,25 @@ limitations under the License.
 ==============================================================================*/
 
 #ifdef TENSORFLOW_USE_ROCM
-#ifndef TENSORFLOW_RTGLIB_CONVERT_GRAPH_
-#define TENSORFLOW_RTGLIB_CONVERT_GRAPH_
+
+#include "convert_graph.h"
+#include "dump_graph.h"
+
+#define RTGLIB tensorflow::rtglib
 
 namespace tensorflow {
 namespace rtglib {
 namespace convert {
-Status ConvertGraphToRTG(std::unique_ptr<Graph>* graph);
+
+Status ConvertGraphToRTG(std::unique_ptr<Graph>* graph) {
+    CHECK_NOTNULL(graph);
+    RTGLIB::dump_graph::DumpGraphToFile("Before convert graph to RTG", **graph);
+    return Status::OK();
+}
     
 } // namspace convert
 } // namespace rtglib
 } // namespace tensorflow
 
 #endif // TENSORFLOW_USE_ROCM
-#endif // TENSORFLOW_RTGLIB_CONVERT_GRAPH_
+
