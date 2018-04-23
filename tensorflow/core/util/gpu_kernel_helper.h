@@ -471,6 +471,7 @@ GPU_ATOMIC_WRAPPER(Add, double) {
   return __longlong_as_double(old);
 }
 
+#ifdef GOOGLE_CUDA
 // Helper functions for GpuAtomicAdd(half*, half), below.
 //
 // Note that if __CUDA_ARCH__ >= 530, we could probably use __hadd2()
@@ -542,7 +543,8 @@ GPU_ATOMIC_WRAPPER(Add, Eigen::half) {
     return ret;
   }
 }
-
+#endif
+ 
 template <typename T>
 __global__ void SetZero(const int nthreads, T* bottom_diff) {
   GPU_1D_KERNEL_LOOP(index, nthreads) { *(bottom_diff + index) = T(0); }
