@@ -342,8 +342,8 @@ diff -Naur eigen/eigen-eigen-429aa5254200/Eigen/src/Core/MathFunctions.h eigen_a
  float fmod(const float& a, const float& b) {
 diff -Naur eigen/eigen-eigen-429aa5254200/Eigen/src/Core/arch/HIP/hcc/Half.h eigen_archive/Eigen/src/Core/arch/HIP/hcc/Half.h
 --- eigen/eigen-eigen-429aa5254200/Eigen/src/Core/arch/HIP/hcc/Half.h	1969-12-31 19:00:00.000000000 -0500
-+++ eigen_archive/Eigen/src/Core/arch/HIP/hcc/Half.h	2018-04-23 10:38:56.169050274 -0400
-@@ -0,0 +1,723 @@
++++ eigen_archive/Eigen/src/Core/arch/HIP/hcc/Half.h	2018-04-24 12:01:05.202087910 -0400
+@@ -0,0 +1,712 @@
 +// This file is part of Eigen, a lightweight C++ template library
 +// for linear algebra.
 +//
@@ -753,25 +753,14 @@ diff -Naur eigen/eigen-eigen-429aa5254200/Eigen/src/Core/arch/HIP/hcc/Half.h eig
 +
 +EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC bool (isinf)(const half& a) {
 +#if defined(EIGEN_HAS_HIP_FP16)
-+  // __hisinf seems to have a bugs in it
-+  // __hisinf(__ushort_as_half(0x7c00)) returns false (0x7c00 is the bit-pattern for infinity)
-+  // __hisinf(__ushort_as_half(0xfc00)) returns false (0xfc00 is the bit-pattern for -infinity)
-+  // This results in a TF unit test failure (cwise_ops_test)
-+  // Therefore not calling __hisinf here
-+  // return __hisinf(a.x);
-+  return (__half_as_ushort(a.x) & 0x7fff) == 0x7c00;
++  return __hisinf(a.x);
 +#else
 +  return (a.x & 0x7fff) == 0x7c00;
 +#endif
 +}
 +EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC bool (isnan)(const half& a) {
 +#if defined(EIGEN_HAS_HIP_FP16)
-+  // __hisnan seems to have a bug in it
-+  // __hisinf(__ushort_as_half(0xfc00)) returns false (0xfc00 is the bit-pattern for -infinity)
-+  // This results in a TF unit test failure (cwise_ops_test)
-+  // Therefore not calling __hisnan here
-+  // return __hisnan(a.x);
-+  return (__half_as_ushort(a.x) & 0x7fff) > 0x7c00;
++  return __hisnan(a.x);
 +#else
 +  return (a.x & 0x7fff) > 0x7c00;
 +#endif
