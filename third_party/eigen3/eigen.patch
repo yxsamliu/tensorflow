@@ -5343,8 +5343,8 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
  #elif defined(EIGEN_USE_SYCL)
 diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorReductionHip.h eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorReductionHip.h
 --- eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorReductionHip.h	1969-12-31 19:00:00.000000000 -0500
-+++ eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorReductionHip.h	2018-04-19 17:04:41.762769702 -0400
-@@ -0,0 +1,780 @@
++++ eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorReductionHip.h	2018-04-27 09:39:36.222075438 -0400
+@@ -0,0 +1,810 @@
 +//#include "hip/hip_runtime.h"
 +// This file is part of Eigen, a lightweight C++ template library
 +// for linear algebra.
@@ -5548,6 +5548,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +  if (hipGridDim_x > 1 && hipThreadIdx_x == 0) {
 +    // Let the last block reset the semaphore
 +    atomicInc(semaphore, hipGridDim_x + 1);
++    __threadfence_system();
 +  }
 +#else
 +  assert(0 && "Shouldn't be called on unsupported device");
@@ -5647,6 +5648,10 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +  }
 +};
 +
++namespace {
++  std::mutex __eigen_reduction_hip_mutex;
++}
++
 +// Specialization for float and double
 +template <typename Self, typename Op, typename OutputType, bool PacketAccess>
 +struct FullReductionLauncher<
@@ -5656,6 +5661,10 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +      internal::is_same<double, OutputType>::value,
 +    void>::type> {
 +  static void run(const Self& self, Op& reducer, const GpuDevice& device, OutputType* output, typename Self::Index num_coeffs) {
++    // guard FullReductionLauncher with a mutex so only 1 FullReductionKernel
++    // is dispatched at a time
++    std::lock_guard<std::mutex> lock(__eigen_reduction_hip_mutex);
++
 +    typedef typename Self::Index Index;
 +    typedef typename Self::CoeffReturnType Scalar;
 +    const int block_size = 256;
@@ -5665,6 +5674,27 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +    unsigned int* semaphore = NULL;
 +    if (num_blocks > 1) {
 +      semaphore = device.semaphore();
++
++      unsigned int semaphore_host = 0xFF;
++      hipMemcpy(&semaphore_host, semaphore, sizeof(unsigned int), hipMemcpyDeviceToHost);
++      if (semaphore_host != 0) {
++        std::cerr << "[WARN][EIGEN][FullReductionLauncher] incorrect semaphore value: "
++                  << semaphore_host << "\n";
++        // wait for all commands on the device to complete so semaphore value
++        // is reset to 0
++        hipDeviceSynchronize();
++
++        // read again
++        hipMemcpy(&semaphore_host, semaphore, sizeof(unsigned int), hipMemcpyDeviceToHost);
++        if (semaphore_host != 0) {
++          std::cerr << "[ERROR][EIGEN][FullReductionLauncher] CRITICAL incorrect semaphore value: "
++                    << semaphore_host << ", apply manual override to 0\n";
++
++          // force set semaphore value to be 0
++          semaphore_host = 0;
++          hipMemcpy(semaphore, &semaphore_host, sizeof(unsigned int), hipMemcpyHostToDevice);
++        }
++      }
 +    }
 +
 +    hipLaunchKernelGGL(HIP_KERNEL_NAME(FullReductionKernel<block_size, num_per_thread, Self, Op, Index>),
@@ -6160,6 +6190,27 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/util/CXX11
  constexpr inline decltype(reduce<product_op, Ts...>::run((*((Ts*)0))...)) arg_prod(Ts... ts)
  {
    return reduce<product_op, Ts...>::run(ts...);
+diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsImpl.h eigen_archive/unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsImpl.h
+--- eigen/eigen-eigen-429aa5254200/unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsImpl.h	2017-09-20 04:22:23.000000000 -0400
++++ eigen_archive/unsupported/Eigen/src/SpecialFunctions/SpecialFunctionsImpl.h	2018-04-27 09:45:05.554077622 -0400
+@@ -121,7 +121,7 @@
+ struct lgamma_impl<float> {
+   EIGEN_DEVICE_FUNC
+   static EIGEN_STRONG_INLINE float run(float x) {
+-#if !defined(EIGEN_CUDA_ARCH) && (defined(_BSD_SOURCE) || defined(_SVID_SOURCE)) && !defined(__APPLE__)
++#if !defined(EIGEN_CUDA_ARCH) && !defined(__HIP_DEVICE_COMPILE__) && (defined(_BSD_SOURCE) || defined(_SVID_SOURCE)) && !defined(__APPLE__)
+     int dummy;
+     return ::lgammaf_r(x, &dummy);
+ #else
+@@ -134,7 +134,7 @@
+ struct lgamma_impl<double> {
+   EIGEN_DEVICE_FUNC
+   static EIGEN_STRONG_INLINE double run(double x) {
+-#if !defined(EIGEN_CUDA_ARCH) && (defined(_BSD_SOURCE) || defined(_SVID_SOURCE)) && !defined(__APPLE__)
++#if !defined(EIGEN_CUDA_ARCH) && !defined(__HIP_DEVICE_COMPILE__) && (defined(_BSD_SOURCE) || defined(_SVID_SOURCE)) && !defined(__APPLE__)
+     int dummy;
+     return ::lgamma_r(x, &dummy);
+ #else
 diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorRandom.h eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorRandom.h
 --- eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorRandom.h	2017-09-20 04:22:23.000000000 -0400
 +++ eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorRandom.h	2018-04-19 17:02:29.974770813 -0400
