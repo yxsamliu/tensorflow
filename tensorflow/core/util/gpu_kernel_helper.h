@@ -471,7 +471,22 @@ GPU_ATOMIC_WRAPPER(Add, double) {
   return __longlong_as_double(old);
 }
 
-#ifdef GOOGLE_CUDA
+#if defined(TENSORFLOW_USE_ROCM_HIP_FP16)
+// Implementation of Eigen::half is different when using HIP FP16 on the GPU
+inline __device__ uint32 add_to_low_half(uint32 val, float x) {
+  unsigned short low_half = static_cast<uint16>(val & 0xffffu);
+  float sum_float = __half2float(__ushort_as_half(low_half)) + x;
+  __half sum_half = __float2half(sum_float);
+  return (val & 0xffff0000u) | __half_as_ushort(sum_half);
+}
+
+inline __device__ uint32 add_to_high_half(uint32 val, float x) {
+  unsigned short high_half = static_cast<uint16>(val >> 16);
+  float sum_float = __half2float(__ushort_as_half(high_half)) + x;
+  __half sum_half = __float2half(sum_float);
+  return (val & 0xffffu) | (__half_as_ushort(sum_half) << 16);
+}
+#else
 // Helper functions for GpuAtomicAdd(half*, half), below.
 //
 // Note that if __CUDA_ARCH__ >= 530, we could probably use __hadd2()
@@ -491,7 +506,8 @@ inline __device__ uint32 add_to_high_half(uint32 val, float x) {
   high_half = static_cast<Eigen::half>(static_cast<float>(high_half) + x);
   return (val & 0xffffu) | (high_half.x << 16);
 }
-
+#endif
+ 
 // Custom implementation of atomicAdd for half. Note that we don't have
 // atomicCAS() for anything less than 32 bits, so we need to include the
 // other 16 bits in the operation.
@@ -522,7 +538,11 @@ GPU_ATOMIC_WRAPPER(Add, Eigen::half) {
     } while (assumed != old);
 
     Eigen::half ret;
+#if defined(TENSORFLOW_USE_ROCM_HIP_FP16)
+    ret.x = __ushort_as_half(old & 0xffffu);
+#else
     ret.x = old & 0xffffu;
+#endif
     return ret;
   } else {
     // The half is in the second part of the uint32 (upper 16 bits).
@@ -539,11 +559,14 @@ GPU_ATOMIC_WRAPPER(Add, Eigen::half) {
     } while (assumed != old);
 
     Eigen::half ret;
+#if defined(TENSORFLOW_USE_ROCM_HIP_FP16)
+    ret.x = __ushort_as_half(old >> 16);
+#else
     ret.x = old >> 16;
+#endif
     return ret;
   }
 }
-#endif
  
 template <typename T>
 __global__ void SetZero(const int nthreads, T* bottom_diff) {
