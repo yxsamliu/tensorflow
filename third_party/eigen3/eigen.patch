@@ -6109,3 +6109,38 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
    // Return the final result
    return result - Eigen::half(1.0f);
  }
+diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorScan.h eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorScan.h
+--- eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorScan.h	2017-09-20 04:22:23.000000000 -0400
++++ eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorScan.h	2018-05-01 09:19:32.648282347 -0400
+@@ -242,7 +242,7 @@
+   }
+ };
+ 
+-#if defined(EIGEN_USE_GPU) && defined(EIGEN_CUDACC)
++#if defined(EIGEN_USE_GPU) && (defined(EIGEN_CUDACC) || defined(__HIPCC__))
+ 
+ // GPU implementation of scan
+ // TODO(ibab) This placeholder implementation performs multiple scans in
+@@ -278,10 +278,21 @@
+      Index total_size = internal::array_prod(self.dimensions());
+      Index num_blocks = (total_size / self.size() + 63) / 64;
+      Index block_size = 64;
++
++#if defined(__HIPCC__)     
++
++     hipLaunchKernelGGL(HIP_KERNEL_NAME(ScanKernel<Self, Reducer>), dim3(num_blocks), dim3(block_size), 0, self.device().stream(), self, total_size, data);
++
++#elif defined(EIGEN_CUDACC)
++
+      LAUNCH_CUDA_KERNEL((ScanKernel<Self, Reducer>), num_blocks, block_size, 0, self.device(), self, total_size, data);
++
++#else
++     #error "Compile flow logic error : Either EIGEN_CUDACC or __HIPCC__ must be defined";
++#endif
+   }
+ };
+-#endif  // EIGEN_USE_GPU && EIGEN_CUDACC
++#endif  // EIGEN_USE_GPU && (EIGEN_CUDACC || __HIPCC__)
+ 
+ }  // end namespace Eigen
+ 
