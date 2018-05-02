@@ -6109,6 +6109,19 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
    // Return the final result
    return result - Eigen::half(1.0f);
  }
+diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorIndexList.h eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorIndexList.h
+--- eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorIndexList.h	2017-09-20 04:22:23.000000000 -0400
++++ eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorIndexList.h	2018-05-02 12:40:34.829676980 -0400
+@@ -350,7 +350,8 @@
+ 
+ namespace internal {
+ 
+-template<typename FirstType, typename... OtherTypes> size_t array_prod(const IndexList<FirstType, OtherTypes...>& sizes) {
++template<typename FirstType, typename... OtherTypes>
++  EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC size_t array_prod(const IndexList<FirstType, OtherTypes...>& sizes) {
+   size_t result = 1;
+   for (int i = 0; i < array_size<IndexList<FirstType, OtherTypes...> >::value; ++i) {
+     result *= sizes[i];
 diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorScan.h eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorScan.h
 --- eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorScan.h	2017-09-20 04:22:23.000000000 -0400
 +++ eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorScan.h	2018-05-01 09:19:32.648282347 -0400
