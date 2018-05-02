@@ -58,6 +58,32 @@ TF_CALL_GPU_NUMBER_TYPES_NO_HALF(REGISTER_SYCL_KERNEL);
 #undef REGISTER_SYCL_KERNEL
 #endif // TENSORFLOW_USE_SYCL
 
+#ifdef TENSORFLOW_USE_RTGLIB
+#define REGISTER_RTGLIB_KERNEL(type)                                         \
+  REGISTER_KERNEL_BUILDER(                                                 \
+      Name("Variable").Device(DEVICE_RTGLIB).TypeConstraint<type>("dtype"),  \
+      VariableOp);                                                         \
+  REGISTER_KERNEL_BUILDER(                                                 \
+      Name("VariableV2").Device(DEVICE_RTGLIB).TypeConstraint<type>("dtype"),\
+      VariableOp);                                                         \
+  REGISTER_KERNEL_BUILDER(Name("TemporaryVariable")                        \
+                              .Device(DEVICE_RTGLIB)                         \
+                              .TypeConstraint<type>("dtype"),              \
+                          TemporaryVariableOp);                            \
+  REGISTER_KERNEL_BUILDER(Name("DestroyTemporaryVariable")                 \
+                              .Device(DEVICE_RTGLIB)                         \
+                              .TypeConstraint<type>("T"),                  \
+                          DestroyTemporaryVariableOp);                     \
+  REGISTER_KERNEL_BUILDER(Name("IsVariableInitialized")                    \
+                              .Device(DEVICE_RTGLIB)                         \
+                              .TypeConstraint<type>("dtype")               \
+                              .HostMemory("is_initialized"),               \
+                          IsVariableInitializedOp);
+
+TF_CALL_GPU_NUMBER_TYPES_NO_HALF(REGISTER_RTGLIB_KERNEL);
+#undef REGISTER_RTGLIB_KERNEL
+#endif // TENSORFLOW_USE_RTGLIB
+
 #if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 // Only register 'Variable' on GPU for the subset of types also supported by
 // 'Assign' (see dense_update_ops.cc.)

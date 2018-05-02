@@ -710,6 +710,7 @@ cc_library(
         ":core_cpu",
         ":gpu_runtime",
         ":sycl_runtime",
+        ":rtglib_runtime",
     ],
 )
 
@@ -1870,6 +1871,33 @@ cc_library(
         ":proto_text",
         "//third_party/eigen3",
         "@local_config_sycl//sycl:sycl",
+    ],
+    alwayslink = 0,
+)
+
+cc_library(
+    name = "rtglib_runtime",
+    srcs = if_not_windows([
+        "common_runtime/rtglib/rtglib_allocator.cc",
+        "common_runtime/rtglib/rtglib_device.cc",
+        "common_runtime/rtglib/rtglib_device_context.cc",
+        "common_runtime/rtglib/rtglib_device_factory.cc",
+    ]),
+    hdrs = if_not_windows([
+        "common_runtime/rtglib/rtglib_allocator.h",
+        "common_runtime/rtglib/rtglib_device.h",
+        "common_runtime/rtglib/rtglib_device_context.h",
+    ]),
+    copts = tf_copts(),
+    linkstatic = 0,
+    deps = [
+        ":core_cpu",
+        ":core_cpu_internal",
+        ":framework",
+        ":framework_internal",
+        ":lib",
+        ":lib_internal",
+        ":proto_text",
     ],
     alwayslink = 0,
 )

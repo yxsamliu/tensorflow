@@ -1,4 +1,4 @@
-/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,19 +13,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/core/kernels/no_op.h"
+#ifdef TENSORFLOW_USE_RTGLIB
+
+#include "tensorflow/core/common_runtime/rtglib/rtglib_allocator.h"
 
 namespace tensorflow {
 
-REGISTER_KERNEL_BUILDER(Name("NoOp").Device(DEVICE_CPU), NoOp);
-REGISTER_KERNEL_BUILDER(Name("NoOp").Device(DEVICE_GPU), NoOp);
+RTGLIBAllocator::~RTGLIBAllocator() {
+}
 
-#if TENSORFLOW_USE_SYCL
-REGISTER_KERNEL_BUILDER(Name("NoOp").Device(DEVICE_SYCL), NoOp);
-#endif
+string RTGLIBAllocator::Name() { return "device:RTGLIB"; }
 
-#if TENSORFLOW_USE_RTGLIB
-REGISTER_KERNEL_BUILDER(Name("NoOp").Device(DEVICE_RTGLIB), NoOp);
-#endif
+void *RTGLIBAllocator::AllocateRaw(size_t alignment, size_t num_bytes) {
+  return nullptr;
+}
+
+void RTGLIBAllocator::DeallocateRaw(void *ptr) {
+}
 
 }  // namespace tensorflow
+
+#endif  // TENSORFLOW_USE_RTGLIB

@@ -93,6 +93,22 @@ REGISTER_SYCL_KERNEL(SYCL, bool);
 #undef REGISTER_SYCL_KERNEL
 #endif
 
+#ifdef TENSORFLOW_USE_RTGLIB
+#define REGISTER_RTGLIB_KERNEL(D, TYPE)                                  \
+  REGISTER_KERNEL_BUILDER(                                             \
+      Name("Const").Device(DEVICE_##D).TypeConstraint<TYPE>("dtype"),  \
+      ConstantOp);
+REGISTER_RTGLIB_KERNEL(RTGLIB, float);
+REGISTER_RTGLIB_KERNEL(RTGLIB, double);
+REGISTER_RTGLIB_KERNEL(RTGLIB, uint8);
+REGISTER_RTGLIB_KERNEL(RTGLIB, int8);
+REGISTER_RTGLIB_KERNEL(RTGLIB, uint16);
+REGISTER_RTGLIB_KERNEL(RTGLIB, int16);
+REGISTER_RTGLIB_KERNEL(RTGLIB, int64);
+REGISTER_RTGLIB_KERNEL(RTGLIB, bool);
+#undef REGISTER_RTGLIB_KERNEL
+#endif
+
 HostConstantOp::HostConstantOp(OpKernelConstruction* ctx)
     : OpKernel(ctx), tensor_(ctx->output_type(0)) {
   const TensorProto* proto = nullptr;
@@ -130,6 +146,14 @@ REGISTER_KERNEL_BUILDER(Name("Const")
                             .TypeConstraint<int32>("dtype"),
                         HostConstantOp);
 #endif  // TENSORFLOW_USE_SYCL
+
+#ifdef TENSORFLOW_USE_RTGLIB
+REGISTER_KERNEL_BUILDER(Name("Const")
+                            .Device(DEVICE_RTGLIB)
+                            .HostMemory("output")
+                            .TypeConstraint<int32>("dtype"),
+                        HostConstantOp);
+#endif  // TENSORFLOW_USE_RTGLIB
 
 typedef Eigen::ThreadPoolDevice CPUDevice;
 typedef Eigen::GpuDevice GPUDevice;

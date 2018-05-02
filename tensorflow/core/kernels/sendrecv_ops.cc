@@ -99,6 +99,12 @@ REGISTER_KERNEL_BUILDER(
     Name("_HostSend").Device(DEVICE_SYCL).HostMemory("tensor"), SendOp);
 #endif // TENSORFLOW_USE_SYCL
 
+#ifdef TENSORFLOW_USE_RTGLIB
+REGISTER_KERNEL_BUILDER(Name("_Send").Device(DEVICE_RTGLIB), SendOp);
+REGISTER_KERNEL_BUILDER(
+    Name("_HostSend").Device(DEVICE_RTGLIB).HostMemory("tensor"), SendOp);
+#endif // TENSORFLOW_USE_RTGLIB
+
 REGISTER_KERNEL_BUILDER(Name("_HostSend").Device(DEVICE_CPU), SendOp);
 REGISTER_KERNEL_BUILDER(
     Name("_HostSend").Device(DEVICE_GPU).HostMemory("tensor"), SendOp);
@@ -172,6 +178,10 @@ REGISTER_KERNEL_BUILDER(Name("_Recv").Device(DEVICE_GPU), RecvOp);
 REGISTER_KERNEL_BUILDER(Name("_Recv").Device(DEVICE_SYCL), RecvOp);
 #endif // TENSORFLOW_USE_SYCL
 
+#ifdef TENSORFLOW_USE_RTGLIB
+REGISTER_KERNEL_BUILDER(Name("_Recv").Device(DEVICE_RTGLIB), RecvOp);
+#endif // TENSORFLOW_USE_RTGLIB
+
 REGISTER_KERNEL_BUILDER(Name("_HostRecv").Device(DEVICE_CPU), RecvOp);
 REGISTER_KERNEL_BUILDER(
     Name("_HostRecv").Device(DEVICE_GPU).HostMemory("tensor"), RecvOp);
@@ -180,5 +190,10 @@ REGISTER_KERNEL_BUILDER(
 REGISTER_KERNEL_BUILDER(
     Name("_HostRecv").Device(DEVICE_SYCL).HostMemory("tensor"), RecvOp);
 #endif // TENSORFLOW_USE_SYCL
+
+#ifdef TENSORFLOW_USE_RTGLIB
+REGISTER_KERNEL_BUILDER(
+    Name("_HostRecv").Device(DEVICE_RTGLIB).HostMemory("tensor"), RecvOp);
+#endif // TENSORFLOW_USE_RTGLIB
 
 }  // end namespace tensorflow

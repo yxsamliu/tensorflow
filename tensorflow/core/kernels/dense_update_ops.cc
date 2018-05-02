@@ -126,6 +126,16 @@ TF_CALL_GPU_NUMBER_TYPES_NO_HALF(REGISTER_SYCL_KERNELS);
 #undef REGISTER_SYCL_KERNELS
 #endif // TENSORFLOW_USE_SYCL
 
+#ifdef TENSORFLOW_USE_RTGLIB
+#define REGISTER_RTGLIB_KERNELS(type)                                \
+REGISTER_KERNEL_BUILDER(                                           \
+    Name("Assign").Device(DEVICE_RTGLIB).TypeConstraint<type>("T"),  \
+    AssignOpT<CPUDevice, type>);
+
+TF_CALL_GPU_NUMBER_TYPES_NO_HALF(REGISTER_RTGLIB_KERNELS);
+#undef REGISTER_RTGLIB_KERNELS
+#endif // TENSORFLOW_USE_RTGLIB
+
 #define REGISTER_KERNELS(type)                                        \
   REGISTER_KERNEL_BUILDER(                                            \
       Name("AssignAdd").Device(DEVICE_CPU).TypeConstraint<type>("T"), \
@@ -161,4 +171,18 @@ TF_CALL_GPU_NUMBER_TYPES(REGISTER_GPU_KERNELS);
 TF_CALL_GPU_NUMBER_TYPES_NO_HALF(REGISTER_SYCL_KERNELS);
 #undef REGISTER_SYCL_KERNELS
 #endif // TENSORFLOW_USE_SYCL
+
+#ifdef TENSORFLOW_USE_RTGLIB
+#define REGISTER_RTGLIB_KERNELS(type)                                         \
+  REGISTER_KERNEL_BUILDER(                                             \
+      Name("AssignAdd").Device(DEVICE_RTGLIB).TypeConstraint<type>("T"), \
+      DenseUpdateOp<CPUDevice, type, DenseUpdateType::ADD>);          \
+  REGISTER_KERNEL_BUILDER(                                             \
+      Name("AssignSub").Device(DEVICE_RTGLIB).TypeConstraint<type>("T"), \
+      DenseUpdateOp<CPUDevice, type, DenseUpdateType::SUB>);
+
+TF_CALL_GPU_NUMBER_TYPES_NO_HALF(REGISTER_RTGLIB_KERNELS);
+#undef REGISTER_RTGLIB_KERNELS
+#endif // TENSORFLOW_USE_RTGLIB
+
 }  // namespace tensorflow

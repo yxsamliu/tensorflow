@@ -139,6 +139,7 @@ def _host_compiler_includes(repository_ctx, cc):
 
   # define TENSORFLOW_USE_ROCM
   entries.append("  unfiltered_cxx_flag: \"-DTENSORFLOW_USE_ROCM\"")
+  entries.append("  unfiltered_cxx_flag: \"-DTENSORFLOW_USE_RTGLIB\"")
 
   return "\n".join(entries)
 

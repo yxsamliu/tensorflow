@@ -83,6 +83,47 @@ REGISTER_SYCL_HOST_KERNEL(bool);
 
 #endif  // TENSORFLOW_USE_SYCL
 
+#if TENSORFLOW_USE_RTGLIB
+#define REGISTER_RTGLIB_KERNEL(type)                                           \
+  REGISTER_KERNEL_BUILDER(                                                   \
+      Name("Identity").Device(DEVICE_RTGLIB).TypeConstraint<type>("T"),        \
+      IdentityOp);                                                           \
+  REGISTER_KERNEL_BUILDER(                                                   \
+      Name("PreventGradient").Device(DEVICE_RTGLIB).TypeConstraint<type>("T"), \
+      IdentityOp);                                                           \
+  REGISTER_KERNEL_BUILDER(                                                   \
+      Name("RefIdentity").Device(DEVICE_RTGLIB).TypeConstraint<type>("T"),     \
+      IdentityOp);                                                           \
+  REGISTER_KERNEL_BUILDER(                                                   \
+      Name("StopGradient").Device(DEVICE_RTGLIB).TypeConstraint<type>("T"),    \
+      IdentityOp)
+
+TF_CALL_NUMBER_TYPES_NO_INT32(REGISTER_RTGLIB_KERNEL);
+
+#undef REGISTER_RTGLIB_KERNEL
+
+#define REGISTER_RTGLIB_HOST_KERNEL(type)                   \
+  REGISTER_KERNEL_BUILDER(Name("Identity")                \
+                              .Device(DEVICE_RTGLIB)        \
+                              .HostMemory("input")        \
+                              .HostMemory("output")       \
+                              .TypeConstraint<type>("T"), \
+                          IdentityOp);                    \
+  REGISTER_KERNEL_BUILDER(Name("RefIdentity")             \
+                              .Device(DEVICE_RTGLIB)        \
+                              .HostMemory("input")        \
+                              .HostMemory("output")       \
+                              .TypeConstraint<type>("T"), \
+                          IdentityOp)
+
+REGISTER_RTGLIB_HOST_KERNEL(int32);
+REGISTER_RTGLIB_HOST_KERNEL(bool);
+
+#undef REGISTER_RTGLIB_HOST_KERNEL
+
+#endif  // TENSORFLOW_USE_RTGLIB
+
+
 #define REGISTER_GPU_KERNEL(type)                                           \
   REGISTER_KERNEL_BUILDER(                                                  \
       Name("Identity").Device(DEVICE_GPU).TypeConstraint<type>("T"),        \
