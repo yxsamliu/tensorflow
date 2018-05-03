@@ -746,7 +746,7 @@ static int GetMinGPUMultiprocessorCount(
 
 namespace {
 
-std::vector<int> supported_amdgpu_isa_versions = { 803, 900 };
+std::vector<int> supported_amdgpu_isa_versions = { 803, 900, 906 };
 
 std::vector<int> GetSupportedAMDGPUISAVersions() {
   return supported_amdgpu_isa_versions;
