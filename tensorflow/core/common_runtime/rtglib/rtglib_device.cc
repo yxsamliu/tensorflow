@@ -88,14 +88,31 @@ Status RTGLIBDevice::MakeTensorFromProto(const TensorProto &tensor_proto,
 
 Status RTGLIBDevice::FillContextMap(const Graph *graph,
                                   DeviceContextMap *device_context_map) {
+  LOG(INFO) << "RTBLIGDevice::FillContextMap IN\n";
+
+  LOG(INFO) << "Graph # of nodes: " << graph->num_nodes();
+  LOG(INFO) << "Graph # of edges: " << graph->num_edges();
+
   // Fill in the context map.  It is OK for this map to contain
   // duplicate DeviceContexts so long as we increment the refcount.
   device_context_map->resize(graph->num_node_ids());
   for (Node *n : graph->nodes()) {
+
+    LOG(INFO) << "Node: " << n->name() << " , " << n->type_string();
+
     device_context_->Ref();
     (*device_context_map)[n->id()] = device_context_;
   }
 
+  for (Edge *e : graph->edges()) {
+    LOG(INFO) << "Edge: "
+              << "(" << e->src()->name() << "," << e->src()->type_string() << ")"
+              << "->"
+              << "(" << e->dst()->name() << "," << e->dst()->type_string() << ")"
+              ;
+  }
+
+  LOG(INFO) << "RTBLIGDevice::FillContextMap OUT\n";
   return Status::OK();
 }
 
