@@ -536,8 +536,6 @@ PHILOX_DEVICE_INLINE Eigen::half Uint16ToHalf(uint16 x) {
 
   // The underlying Eigen::Half implementation is different on the CPU vs the GPU
   // So need to handle this assignment differently depending on what we are compiling for
-  // Ideally we should be checking the EIGEN_USE_HIP_FP16 define here, but that is defined
-  // within Eigen code only. We should probably have a TENSORFLOW_ROCM_USE_FP16 macro here
 #if defined(TENSORFLOW_USE_ROCM_HIP_FP16)
   result.x = __ushort_as_half(val);
 #else  
