@@ -15,20 +15,41 @@ limitations under the License.
 
 #ifdef TENSORFLOW_USE_RTGLIB
 
+#include "tensorflow/core/common_runtime/bfc_allocator.h"
 #include "tensorflow/core/common_runtime/rtglib/rtglib_allocator.h"
+#include "tensorflow/core/framework/allocator.h"
+#include "tensorflow/core/platform/mem.h"
 
 namespace tensorflow {
 
+class RTGLIBSubAllocator : public SubAllocator {
+ public:
+  ~RTGLIBSubAllocator() override {}
+
+  void* Alloc(size_t alignment, size_t num_bytes) override {
+    return port::AlignedMalloc(num_bytes, alignment);
+  }
+  void Free(void* ptr, size_t num_bytes) override { port::AlignedFree(ptr); }
+};
+
+
+RTGLIBAllocator::RTGLIBAllocator() {
+  allocator_ = new BFCAllocator(new RTGLIBSubAllocator, 1024 * 1024 * 1024,
+                                true, "RTGLIB");
+}
+
 RTGLIBAllocator::~RTGLIBAllocator() {
+  delete allocator_;
 }
 
 string RTGLIBAllocator::Name() { return "device:RTGLIB"; }
 
 void *RTGLIBAllocator::AllocateRaw(size_t alignment, size_t num_bytes) {
-  return nullptr;
+  return allocator_->AllocateRaw(alignment, num_bytes);
 }
 
 void RTGLIBAllocator::DeallocateRaw(void *ptr) {
+  allocator_->DeallocateRaw(ptr);
 }
 
 }  // namespace tensorflow

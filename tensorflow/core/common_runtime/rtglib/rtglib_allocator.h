@@ -27,7 +27,7 @@ namespace tensorflow {
 
 class RTGLIBAllocator : public Allocator {
  public:
-  RTGLIBAllocator() {}
+  RTGLIBAllocator();
   virtual ~RTGLIBAllocator() override;
   string Name() override;
   void *AllocateRaw(size_t alignment, size_t num_bytes) override;
@@ -39,6 +39,8 @@ class RTGLIBAllocator : public Allocator {
  private:
 
   TF_DISALLOW_COPY_AND_ASSIGN(RTGLIBAllocator);
+
+  Allocator* allocator_; // owned
 };
 
 }  // namespace tensorflow

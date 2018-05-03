@@ -46,10 +46,12 @@ void RTGLIBDevice::Compute(OpKernel *op_kernel, OpKernelContext *context) {
 }
 
 Allocator *RTGLIBDevice::GetAllocator(AllocatorAttributes attr) {
-  if (attr.on_host())
-    return cpu_allocator_;
-  else
-    return rtglib_allocator_;
+  // force allocate on host memory
+  return cpu_allocator_;
+  //if (attr.on_host())
+  //  return cpu_allocator_;
+  //else
+  //  return rtglib_allocator_;
 }
 
 Status RTGLIBDevice::MakeTensorFromProto(const TensorProto &tensor_proto,
