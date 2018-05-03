@@ -20,7 +20,6 @@ export PATH=$HCC_HOME/bin:$HIP_PATH/bin:$PATH
 On Python 2-based systems:
 ```
 sudo apt-get update && sudo apt-get install -y \
-    python-numpy \
     python-dev \
     python-wheel \
     python-mock \
@@ -30,12 +29,12 @@ sudo apt-get update && sudo apt-get install -y \
     python-setuptools && \
     sudo apt-get clean && \
     sudo rm -rf /var/lib/apt/lists/*
+pip install numpy --upgrade
 ```
 
 On Python 3-based systems:
 ```
 sudo apt-get update && sudo apt-get install -y \
-    python3-numpy \
     python3-dev \
     python3-wheel \
     python3-mock \
@@ -45,6 +44,7 @@ sudo apt-get update && sudo apt-get install -y \
     python3-setuptools && \
     sudo apt-get clean && \
     sudo rm -rf /var/lib/apt/lists/*
+pip3 install numpy --upgrade
 ```
 
 ## Install bazel
