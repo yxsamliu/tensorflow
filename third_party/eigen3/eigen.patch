@@ -5152,8 +5152,8 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
  #else
 diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorReduction.h eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorReduction.h
 --- eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorReduction.h	2017-09-20 04:22:23.000000000 -0400
-+++ eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorReduction.h	2018-04-27 11:29:32.530119194 -0400
-@@ -334,7 +334,7 @@
++++ eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorReduction.h	2018-05-03 10:01:10.433460278 -0400
+@@ -334,12 +334,12 @@
  };
  
  
@@ -5162,6 +5162,12 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
  template <int B, int N, typename S, typename R, typename I>
  __global__ void FullReductionKernel(R, const S, I, typename S::CoeffReturnType*, unsigned int*);
  
+ 
+-#ifdef EIGEN_HAS_CUDA_FP16
++#if defined(EIGEN_HAS_CUDA_FP16) || defined(EIGEN_HAS_HIP_FP16)
+ template <typename S, typename R, typename I>
+ __global__ void ReductionInitFullReduxKernelHalfFloat(R, const S, I, half2*);
+ template <int B, int N, typename S, typename R, typename I>
 @@ -495,7 +495,11 @@
  
    EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Dimensions& dimensions() const { return m_dimensions; }
@@ -5184,15 +5190,18 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
        bool reducing_inner_dims = true;
        for (int i = 0; i < NumReducedDims; ++i) {
          if (static_cast<int>(Layout) == static_cast<int>(ColMajor)) {
-@@ -694,7 +698,7 @@
+@@ -694,9 +698,9 @@
  #ifdef EIGEN_USE_THREADS
    template <typename S, typename O, bool V> friend struct internal::FullReducerShard;
  #endif
 -#if defined(EIGEN_USE_GPU) && defined(EIGEN_CUDACC)
 +#if defined(EIGEN_USE_GPU) && (defined(EIGEN_CUDACC) || defined(__HIPCC__))
    template <int B, int N, typename S, typename R, typename I> KERNEL_FRIEND void internal::FullReductionKernel(R, const S, I, typename S::CoeffReturnType*, unsigned int*);
- #ifdef EIGEN_HAS_CUDA_FP16
+-#ifdef EIGEN_HAS_CUDA_FP16
++#if defined(EIGEN_HAS_CUDA_FP16) || defined(EIGEN_HAS_HIP_FP16)
    template <typename S, typename R, typename I> KERNEL_FRIEND void internal::ReductionInitFullReduxKernelHalfFloat(R, const S, I, half2*);
+   template <int B, int N, typename S, typename R, typename I> KERNEL_FRIEND void internal::FullReductionKernelHalfFloat(R, const S, I, half*, half2*);
+   template <int NPT, typename S, typename R, typename I> KERNEL_FRIEND void internal::InnerReductionKernelHalfFloat(R, const S, I, I, half*);
 @@ -774,14 +778,21 @@
    // Indexed by reduced dimensions.
    array<Index, NumReducedDims> m_reducedDims;
@@ -6122,6 +6131,18 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
    size_t result = 1;
    for (int i = 0; i < array_size<IndexList<FirstType, OtherTypes...> >::value; ++i) {
      result *= sizes[i];
+diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorMeta.h eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorMeta.h
+--- eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorMeta.h	2017-09-20 04:22:23.000000000 -0400
++++ eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorMeta.h	2018-05-03 10:04:28.869465681 -0400
+@@ -52,7 +52,7 @@
+ };
+ 
+ // For CUDA packet types when using a GpuDevice
+-#if defined(EIGEN_USE_GPU) && defined(EIGEN_CUDACC) && defined(EIGEN_HAS_CUDA_FP16)
++#if defined(EIGEN_USE_GPU) && ((defined(EIGEN_CUDACC) && defined(EIGEN_HAS_CUDA_FP16)) || defined(EIGEN_HAS_HIP_FP16))
+ template <>
+ struct PacketType<half, GpuDevice> {
+   typedef half2 type;
 diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorScan.h eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorScan.h
 --- eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorScan.h	2017-09-20 04:22:23.000000000 -0400
 +++ eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorScan.h	2018-05-01 09:19:32.648282347 -0400
