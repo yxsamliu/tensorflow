@@ -24,13 +24,45 @@ namespace tensorflow {
 namespace rtglib {    
 namespace dump_graph {
 
+struct NameCounts {
+  mutex counts_mutex;
+  std::unordered_map<string, int> counts;
+};
+
+string MakeUniquePath(string name) {
+  static NameCounts& instance = *new NameCounts;
+
+  // Remove illegal characters from `name`.
+  for (int i = 0; i < name.size(); ++i) {
+      if (name[i] == '/' || std::isspace(name[i])) {
+        name[i] = '_';
+      }
+  }
+
+  int count;
+  {
+    mutex_lock lock(instance.counts_mutex);
+    count = instance.counts[name]++;
+  }
+
+  string path = strings::StrCat("./", name);
+  if (count > 0) {
+    strings::StrAppend(&path, "_", count);
+  }
+  strings::StrAppend(&path, ".pbtxt");
+  return path;
+}
+
+    
 void DumpGraphDefToFile(const string& name, const GraphDef& graph_def) {
-    
-    
+  string path = MakeUniquePath(name);
+  TF_CHECK_OK(WriteTextProto(Env::Default(), path, graph_def));
 }
 
 void DumpGraphToFile(const string& name, const Graph& graph) {
-    
+  GraphDef graph_def;
+  graph.ToGraphDef(&graph_def);
+  return DumpGraphDefToFile(name, graph_def);
 }
     
 } // namespace dump_graph

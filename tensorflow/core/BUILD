@@ -125,6 +125,8 @@ load(
     "if_mkl",
 )
 
+load("//tensorflow:tensorflow.bzl", "if_rocm")
+
 # -----------------------------------------------------------------------------
 # Public targets
 
@@ -711,6 +713,7 @@ cc_library(
         ":core_cpu",
         ":gpu_runtime",
         ":sycl_runtime",
+        ":rtglib_convert",
     ],
 )
 
@@ -1663,9 +1666,6 @@ tf_gpu_library(
         "graph/gradients.cc",
         "graph/mkl_layout_pass.cc",
         "graph/mkl_tfconversion_pass.cc",
-        "graph/rocm/convert_graph.cc",
-        "graph/rocm/dump_graph.cc",
-        "graph/rocm/rocm_pass.cc",
         "graph/quantize_training.cc",
         "public/session.h",
         "public/session_options.h",
@@ -1705,31 +1705,60 @@ tf_gpu_library(
         "common_runtime/visitable_allocator.h",
         "graph/gradients.h",
         "graph/quantize_training.h",
-        "graph/rocm/convert_graph.h",
-        "graph/rocm/dump_graph.h",
     ],
     copts = tf_copts() + ["-g", "-Og", ],
     deps = [
-               ":core_cpu_base",
-               ":framework",
-               ":framework_internal",
-               ":function_ops_op_lib",
-               ":functional_grad",
-               ":functional_ops_op_lib",
-               ":lib",
-               ":lib_internal",
-               ":proto_text",
-               ":protos_all_cc",
-               "//tensorflow/core/grappler:grappler_item",
-               "//tensorflow/core/grappler/clusters:utils",
-               "//tensorflow/core/grappler/clusters:virtual_cluster",
-               "//tensorflow/core/grappler/optimizers:meta_optimizer",
-               "//third_party/eigen3",
-               "//tensorflow/core/kernels:required",
-           ] + if_mkl(["//third_party/mkl:intel_binary_blob"]) +
-           tf_additional_core_deps(),
+        ":core_cpu_base",
+        ":framework",
+        ":framework_internal",
+        ":function_ops_op_lib",
+        ":functional_grad",
+        ":functional_ops_op_lib",
+        ":lib",
+        ":lib_internal",
+        ":proto_text",
+        ":protos_all_cc",
+        "//tensorflow/core/grappler:grappler_item",
+        "//tensorflow/core/grappler/clusters:utils",
+        "//tensorflow/core/grappler/clusters:virtual_cluster",
+        "//tensorflow/core/grappler/optimizers:meta_optimizer",
+        "//third_party/eigen3",
+        "//tensorflow/core/kernels:required",
+    ] + if_mkl(["//third_party/mkl:intel_binary_blob"]) +
+    tf_additional_core_deps(),
     alwayslink = 1,
 )
+
+cc_library(
+        name = "rtglib_convert",
+        srcs = if_not_windows([
+             "graph/rocm/convert_graph.cc",
+             "graph/rocm/dump_graph.cc",
+             "graph/rocm/rocm_pass.cc",
+             ]),
+        hdrs = CORE_CPU_BASE_HDRS + if_not_windows([
+             "graph/rocm/convert_graph.h",
+             "graph/rocm/dump_graph.h",
+             ]),
+        copts = tf_copts() + ["-g", "-Og", ] + ["-std=c++14"]
+                + ["-fexceptions"],
+        linkopts = if_rocm(["-lrtg"]),
+        deps = [
+            ":core_cpu",
+            ":core_cpu_internal",
+            ":framework",
+            ":framework_internal",
+            ":lib",
+            ":lib_internal",
+            ":proto_text",
+            "//tensorflow/core/grappler:grappler_item",
+            "//tensorflow/core/grappler/clusters:utils",
+            "//tensorflow/core/grappler/clusters:virtual_cluster",
+            "//tensorflow/core/grappler/optimizers:meta_optimizer",
+         ] + tf_additional_core_deps(),
+         alwayslink = 1,
+)
+
 
 # This library is deprecated and no longer publicly available.
 # Do not add more uses of it.

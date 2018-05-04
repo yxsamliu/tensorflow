@@ -14,17 +14,73 @@ limitations under the License.
 ==============================================================================*/
 
 #ifdef TENSORFLOW_USE_ROCM
-#ifndef TENSORFLOW_RTGLIB_CONVERT_GRAPH_
-#define TENSORFLOW_RTGLIB_CONVERT_GRAPH_
+#ifndef TENSORFLOW_RTGLIB_CONVERT_
+#define TENSORFLOW_RTGLIB_CONVERT_
+
+#include "tensorflow/core/lib/core/status.h"
+#include "tensorflow/core/graph/graph.h"
+#include "tensorflow/core/framework/node_def.pb.h"
+#include "tensorflow/core/framework/node_def_builder.h"
 
 namespace tensorflow {
 namespace rtglib {
 namespace convert {
-Status ConvertGraphToRTG(std::unique_ptr<Graph>* graph);
+
+class Segment {
+ public:
+     explicit Segment() { init(); }
+ private:
+     std::vector<Node*> nodes;
+     void init() { nodes.clear(); }
+ };    
+
     
+class  Converter;
+using OpConverter =
+    std::function<tensorflow::Status(Converter&, const tensorflow::NodeDef&)>;
+    
+class Converter {
+public:
+    explicit Converter() { Init(); }
+    bool IsSegmentCandidate(Node* node);
+    bool IsRegistered(Node* Node);
+    bool IsLeaf(Node * node);
+    enum SegmentNodeAttr{
+        Visited = 0,
+        IsExit,
+        IsEntry,
+        IsInput,
+        IsCandidate
+    };
+ 
+private:
+    std::unordered_map<string, OpConverter> op_registry_;
+    std::unordered_map<int, int> segmentMap;
+     std::unordered_map<int, int64> segmentNodeAttrMap;
+     int maxSegmentId;
+     void Register_op_converters();
+     void Init() {
+         Register_op_converters();
+         maxSegmentId = 0;
+         segmentMap.clear();
+         segmentNodeAttrMap.clear();
+     }
+};
+
+Status ConvertActivation(Converter& ctx, const NodeDef& node_def); 
+Status ConvertBiasAdd(Converter& ctx, const NodeDef& node_def);
+Status ConvertConst(Converter& ctx, const NodeDef& node_def); 
+Status ConvertConv2D(Converter& ctx, const NodeDef& node_def);
+Status ConvertIdentity(Converter& ctx, const NodeDef& node_def);  
+Status ConvertMaxPool(Converter& ctx, const NodeDef& node_def);
+Status ConvertGraphToRTG(std::unique_ptr<Graph>* graph);
+Status ConvertPlaceholder(Converter& ctx, const NodeDef& node_def);
+Status ConvertRelu(Converter& ctx, const NodeDef& node_def);
+Status ConvertScale(Converter& ctx, const NodeDef& node_def);
+
 } // namspace convert
 } // namespace rtglib
 } // namespace tensorflow
 
+#endif // TENSORFLOW_RTGLIB_CONVERT_
 #endif // TENSORFLOW_USE_ROCM
-#endif // TENSORFLOW_RTGLIB_CONVERT_GRAPH_
