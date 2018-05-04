@@ -160,7 +160,11 @@ class Conv2DTest(test.TestCase):
     else:
       # It is important that float32 comes before float16 here,
       # as we will be using its gradients as reference for fp16 gradients.
-      return [dtypes.float32, dtypes.float16]
+      if test.is_built_with_rocm() :
+        # Support for some fp16 functionality is not available in ROCm
+        return [dtypes.float32]
+      else :
+        return [dtypes.float32, dtypes.float16]
 
   def _SetupValuesForDevice(self, tensor_in_sizes, filter_in_sizes, strides,
                             padding, data_format, dtype, use_gpu):

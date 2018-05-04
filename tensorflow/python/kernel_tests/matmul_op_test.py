@@ -211,8 +211,10 @@ if __name__ == "__main__":
   sizes = [1, 3, 5]
   trans_options = [[False, False], [True, False], [False, True]]
   for use_static_shape in [False, True]:
-    for dtype in (np.int32, np.float16, np.float32, np.float64, np.complex64,
-                  np.complex128):
+    dtype_list = [np.int32, np.float16, np.float32, np.float64]
+    if not test_lib.is_built_with_rocm() :
+      dtype_list += [np.complex64, np.complex128]
+    for dtype in dtype_list:
       if not use_static_shape and dtype == np.int32:
         # TODO(rmlarsen): Re-enable this test when we have fixed the underlying
         # bug in Windows (b/35935459).
