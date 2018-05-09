@@ -26,14 +26,25 @@ namespace tensorflow {
 namespace rtglib {
 namespace convert {
 
-class Segment {
- public:
-     explicit Segment() { init(); }
- private:
-     std::vector<Node*> nodes;
-     void init() { nodes.clear(); }
- };    
+#define MIN_CLUSTER_SIZE 3    
 
+class Cluster {
+ public:
+     explicit Cluster() { init(); }
+     void addInputEdge(const Edge* edge)  { input_edges.push_back(edge);  }
+     void addOutputEdge(const Edge* edge) { output_edges.push_back(edge); }
+     void addNode(Node* node)             { nodes.push_back(node);        }
+     int  getSize()                       { return nodes.size();          }
+ private:     
+     std::vector<const Edge*> input_edges;
+     std::vector<const Edge*> output_edges;
+     std::vector<Node*> nodes;
+     void init() {
+         input_edges.clear();
+         output_edges.clear();
+         nodes.clear();
+     }
+};    
     
 class  Converter;
 using OpConverter =
@@ -42,28 +53,12 @@ using OpConverter =
 class Converter {
 public:
     explicit Converter() { Init(); }
-    bool IsSegmentCandidate(Node* node);
     bool IsRegistered(Node* Node);
-    bool IsLeaf(Node * node);
-    enum SegmentNodeAttr{
-        Visited = 0,
-        IsExit,
-        IsEntry,
-        IsInput,
-        IsCandidate
-    };
- 
 private:
     std::unordered_map<string, OpConverter> op_registry_;
-    std::unordered_map<int, int> segmentMap;
-     std::unordered_map<int, int64> segmentNodeAttrMap;
-     int maxSegmentId;
      void Register_op_converters();
      void Init() {
          Register_op_converters();
-         maxSegmentId = 0;
-         segmentMap.clear();
-         segmentNodeAttrMap.clear();
      }
 };
 

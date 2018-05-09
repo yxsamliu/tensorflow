@@ -15,9 +15,12 @@ limitations under the License.
 
 #ifdef TENSORFLOW_USE_ROCM
 
+#include "tensorflow/core/common_runtime/function.h"
+#include "tensorflow/core/common_runtime/graph_optimizer.h"
 #include "tensorflow/core/common_runtime/optimization_registry.h"
 #include "tensorflow/core/graph/algorithm.h"
 #include "convert_graph.h"
+
 
 namespace tensorflow {
 class ROCmPass : public GraphOptimizationPass {
@@ -28,10 +31,16 @@ class ROCmPass : public GraphOptimizationPass {
     Status Run(const GraphOptimizationPassOptions& options);
 };
 
+#if 0
 const OptimizationPassRegistry::Grouping kROCmPassGroup =
     OptimizationPassRegistry::POST_PARTITIONING;
+REGISTER_OPTIMIZATION(kROCmPassGroup, 1, ROCmPass);
+#else    
+const OptimizationPassRegistry::Grouping kROCmPassGroup =
+    OptimizationPassRegistry::POST_REWRITE_FOR_EXEC;
+REGISTER_OPTIMIZATION(kROCmPassGroup, 0, ROCmPass);
+#endif
     
-REGISTER_OPTIMIZATION(kROCmPassGroup, 1, ROCmPass);    
 Status ROCmPass::Run(
   const GraphOptimizationPassOptions& options) {
     if (options.graph == nullptr && options.partition_graphs == nullptr) {
@@ -40,10 +49,12 @@ Status ROCmPass::Run(
     auto convertGraph = [&](std::unique_ptr<Graph>* g) {
         // Get the ownership of a graph
         std::unique_ptr<Graph>* ng = std::move(g);
+        // TODO: invoke grappler optimizer to do some pre-optimizations.
         tensorflow::rtglib::convert::ConvertGraphToRTG(ng);
         // Return the ownership of a graph back
         g->reset(ng->release());
     };
+
     if (kROCmPassGroup != OptimizationPassRegistry::POST_PARTITIONING) {
         // For any pre-partitioning phase, a graph is stored in options.graph.
         convertGraph(options.graph);
