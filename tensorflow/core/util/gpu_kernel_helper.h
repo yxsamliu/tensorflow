@@ -461,6 +461,7 @@ GPU_ATOMIC_WRAPPER(Add, double) {
   uint64 old = *address_as_ull, assumed;
 
 #if defined(TENSORFLOW_USE_ROCM)
+  // FIXME remove the following workaround once the bug is fixed
   // There is compiler bug in the implementation of __longlong_as_double
   // in ROCm, need to workaround that
   double* assumed_as_double = reinterpret_cast<double*>(&assumed);
@@ -647,6 +648,7 @@ GPU_ATOMIC_WRAPPER(Mul, double) {
   uint64 old = *address_as_ull, assumed;
 
 #if defined(TENSORFLOW_USE_ROCM)
+  // FIXME remove the following workaround once the bug is fixed
   // There is compiler bug in the implementation of __longlong_as_double
   // in ROCm, need to workaround that
   double* assumed_as_double = reinterpret_cast<double*>(&assumed);
@@ -714,6 +716,7 @@ GPU_ATOMIC_WRAPPER(Div, double) {
   uint64 old = *address_as_ull, assumed;
 
 #if defined(TENSORFLOW_USE_ROCM)
+  // FIXME remove the following workaround once the bug is fixed
   // There is compiler bug in the implementation of __longlong_as_double
   // in ROCm, need to workaround that
   double* assumed_as_double = reinterpret_cast<double*>(&assumed);
