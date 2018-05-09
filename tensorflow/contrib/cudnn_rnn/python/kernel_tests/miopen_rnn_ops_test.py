@@ -169,7 +169,7 @@ class CudnnRNNTest(TensorFlowTestCase):
 
     return output_tuple, model, params
 
-  @unittest.skipUnless(test.is_built_with_cuda(),
+  @unittest.skipUnless(test.is_built_with_rocm(),
                        "Test only applicable when running on GPUs")
 
   def testCudnnCompatibleRnnCells(self):
@@ -356,7 +356,7 @@ class CudnnRNNTest(TensorFlowTestCase):
       total_sum_v_restored = sess.run(total_sum)
       self.assertAllEqual(total_sum_v, total_sum_v_restored)
 
-  @unittest.skipUnless(test.is_built_with_cuda(),
+  @unittest.skipUnless(test.is_built_with_rocm(),
                        "Test only applicable when running on GPUs")
   def testSaveRestore(self):
     rnn_modes = [
@@ -392,7 +392,7 @@ class CudnnRNNTest(TensorFlowTestCase):
       params_size_v = sess.run(params_size)
       self.assertLessEqual(min_params_size, params_size_v)
 
-#  @unittest.skipUnless(test.is_built_with_cuda(),
+#  @unittest.skipUnless(test.is_built_with_rocm(),
 #                       "Test only applicable when running on GPUs")
   def testLSTMParamsSize(self):
     test_configs = [
@@ -450,7 +450,7 @@ class CudnnRNNTest(TensorFlowTestCase):
       self.assertAllClose(
           total_sum_v[0], expected, atol=tolerance, rtol=tolerance)
 
-#  @unittest.skipUnless(test.is_built_with_cuda(),
+#  @unittest.skipUnless(test.is_built_with_rocm(),
 #                       "Test only applicable when running on GPUs")
   def testSimpleInference(self):
     # Cudnn scales result for dropout during training, therefore dropout has no
@@ -587,7 +587,7 @@ class CudnnRNNTest(TensorFlowTestCase):
       self.assertLess(err, tolerance)
       os.environ["TF_CUDNN_RESET_RND_GEN_STATE"] = old_env_state
 
-#  @unittest.skipUnless(test.is_built_with_cuda(),
+#  @unittest.skipUnless(test.is_built_with_rocm(),
 #                       "Test only applicable when running on GPUs")
   def testSimpleTraining(self):
     test_configs = [

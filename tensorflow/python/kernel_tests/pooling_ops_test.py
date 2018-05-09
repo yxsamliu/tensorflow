@@ -133,7 +133,7 @@ class PoolingTest(test.TestCase):
     self._VerifyOneType(pool_func, input_sizes, ksize, strides, padding,
                         data_format, dtypes.float32, expected, use_gpu)
 
-    if not use_gpu or test_util.CudaSupportsHalfMatMulAndConv():
+    if not use_gpu or test_util.GpuSupportsHalfMatMulAndConv():
       self._VerifyOneType(pool_func, input_sizes, ksize, strides, padding,
                           data_format, dtypes.float16, expected, use_gpu)
 

@@ -22,20 +22,29 @@ limitations under the License.
 namespace tensorflow {
 
 bool IsGoogleCudaEnabled() {
-// XXX return true even in case TENSORFLOW_USE_ROCM is defined
-// need to figure out a better interface in both C++ and Python layer
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#if GOOGLE_CUDA
   return true;
 #else
   return false;
 #endif
 }
 
-bool CudaSupportsHalfMatMulAndConv() {
+bool IsBuiltWithROCm() {
+#if TENSORFLOW_USE_ROCM
+  return true;
+#else
+  return false;
+#endif
+}
+
+  
+bool GpuSupportsHalfMatMulAndConv() {
 #if GOOGLE_CUDA
   // NOTE: We check compile-time and not runtime, since the check for
   // whether we include the fp16 kernels or not is compile-time.
   return CUDA_VERSION >= 7050;
+#elif TENSORFLOW_USE_ROCM
+  return true;
 #else
   return false;
 #endif
