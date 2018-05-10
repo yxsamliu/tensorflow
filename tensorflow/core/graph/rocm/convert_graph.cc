@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #ifdef TENSORFLOW_USE_ROCM
-#include "rocm/include/rtg/program.hpp"
+
 
 #include "tensorflow/core/graph/algorithm.h"
 #include "convert_graph.h"
@@ -77,8 +77,65 @@ void Converter::Register_op_converters()  {
 #endif    
 }
 
-bool Converter::IsRegistered(Node * node) {
+bool Converter::IsRegistered(const Node * node) {
     return op_registry_.count(node->type_string());
+}
+
+rtg::shape Converter::parse_type(const Node * node) {
+    const NodeDef& nodeDef = node->def();
+    std::string name = node->name();
+    DataType data_type;
+    if (nodeDef.attr().count("dtype")) {
+        GetNodeAttr(nodeDef, "dtype", &data_type);
+    } else if (nodeDef.attr().count("T")) {
+        GetNodeAttr(nodeDef, "T", &data_type);
+    } else {
+        CHECK(false) << "data type not found";
+    }
+    rtg::shape::type_t shape_type;
+    switch (data_type) {
+    case DT_FLOAT: shape_type = rtg::shape::float_type; break;
+    case DT_DOUBLE: shape_type = rtg::shape::double_type; break;
+    case DT_INT64: shape_type = rtg::shape::int64_type; break;
+    // case DT_UINT64: shape_type = rtg::shape::uint64_type; break;
+    case DT_INT32: shape_type = rtg::shape::int32_type; break;
+    //    case DT_UINT32: shape_type = rtg::shape::uint32_type; break;
+    case DT_INT16: shape_type = rtg::shape::int16_type; break;
+    case DT_UINT16: shape_type = rtg::shape::uint16_type; break;
+    case DT_INT8: shape_type = rtg::shape::int8_type; break;
+    default:
+        CHECK(false) << "unmatched RTG data type";
+    }
+    
+    std::vector<std::size_t> dims;
+    if (nodeDef.attr().count("value")) {
+        const TensorProto& raw_val = nodeDef.attr().at("value").tensor();
+        DataType d_type = raw_val.dtype();
+        CHECK(data_type == d_type) << "data type unmatched";
+        const TensorShape& tensor_shape = raw_val.tensor_shape();
+        for (int64 i = 0, e = tensor_shape.dims(); i < e; i++) {
+            dims.push_back(tensor_shape.dim_size(i));
+        }
+    } else {
+        //        CHECK(false) << "value attribute is not found";
+    }
+    return {shape_type, dims};
+}
+
+Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster) {
+    rtg::program * program = new rtg::program;
+    if (!program)
+        return errors::Internal("Fail to create RTG program");
+
+    Converter convert;
+    for (const Edge* edge : cluster.input_edges) {
+        if (edge->IsControlEdge())
+            continue;
+        const Node* srcNode = edge->src();
+        rtg::shape shape = convert.parse_type(srcNode);
+    }
+
+    return Status::OK();    
 }
 
 Status ConvertGraphToRTG(std::unique_ptr<Graph>* g) {
@@ -137,7 +194,7 @@ Status ConvertGraphToRTG(std::unique_ptr<Graph>* g) {
             if (id2Order[nextId] >= id2Order[id]) {
                 // TODO: Encounter a cycle, might need to detect cycle ahead
                 // of time.
-                CHECK(false);
+                CHECK(false) << "TODO: encounter a circle";
             }
             if (!isCtrlEdge)
                 id2Enqueue[nextId] = true;
@@ -148,7 +205,7 @@ Status ConvertGraphToRTG(std::unique_ptr<Graph>* g) {
                 iterStack.push(nextNode);
             } else if (bothAreCandidates && !isCtrlEdge) {
                 // TODO: merge cluster by hashing segment ID to cluster Id.
-                CHECK(false);
+                CHECK(false) << "TODO: merge segments";
             }
 
             if (isCandidate && (!id2Candidate[nextId] || isCtrlEdge))
@@ -200,7 +257,6 @@ Status ConvertGraphToRTG(std::unique_ptr<Graph>* g) {
                     if (!inCluster(dstId) ||  (getClusterId(dstId) != clusterId)) {
                         clusters[clusterId].addOutputEdge(edge);
                     }
-                        
                 }
             }
         }
@@ -209,6 +265,7 @@ Status ConvertGraphToRTG(std::unique_ptr<Graph>* g) {
             Cluster& cluster = clusters[id];
             if (cluster.getSize() < MIN_CLUSTER_SIZE)
                 continue;
+            ConvertSubgraphToRTG(g, cluster);
         }
     }
 

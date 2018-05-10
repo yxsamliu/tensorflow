@@ -22,20 +22,20 @@ limitations under the License.
 #include "tensorflow/core/framework/node_def.pb.h"
 #include "tensorflow/core/framework/node_def_builder.h"
 
+#include "rocm/include/rtg/program.hpp"
+
 namespace tensorflow {
 namespace rtglib {
 namespace convert {
 
 #define MIN_CLUSTER_SIZE 3    
 
-class Cluster {
- public:
+struct Cluster {
      explicit Cluster() { init(); }
      void addInputEdge(const Edge* edge)  { input_edges.push_back(edge);  }
      void addOutputEdge(const Edge* edge) { output_edges.push_back(edge); }
      void addNode(Node* node)             { nodes.push_back(node);        }
      int  getSize()                       { return nodes.size();          }
- private:     
      std::vector<const Edge*> input_edges;
      std::vector<const Edge*> output_edges;
      std::vector<Node*> nodes;
@@ -53,7 +53,8 @@ using OpConverter =
 class Converter {
 public:
     explicit Converter() { Init(); }
-    bool IsRegistered(Node* Node);
+    bool IsRegistered(const Node*);
+    rtg::shape parse_type(const Node*);
 private:
     std::unordered_map<string, OpConverter> op_registry_;
      void Register_op_converters();
@@ -62,16 +63,17 @@ private:
      }
 };
 
-Status ConvertActivation(Converter& ctx, const NodeDef& node_def); 
-Status ConvertBiasAdd(Converter& ctx, const NodeDef& node_def);
-Status ConvertConst(Converter& ctx, const NodeDef& node_def); 
-Status ConvertConv2D(Converter& ctx, const NodeDef& node_def);
-Status ConvertIdentity(Converter& ctx, const NodeDef& node_def);  
-Status ConvertMaxPool(Converter& ctx, const NodeDef& node_def);
-Status ConvertGraphToRTG(std::unique_ptr<Graph>* graph);
-Status ConvertPlaceholder(Converter& ctx, const NodeDef& node_def);
-Status ConvertRelu(Converter& ctx, const NodeDef& node_def);
-Status ConvertScale(Converter& ctx, const NodeDef& node_def);
+Status ConvertActivation(Converter&, const NodeDef&); 
+Status ConvertBiasAdd(Converter&, const NodeDef&);
+Status ConvertConst(Converter&, const NodeDef&); 
+Status ConvertConv2D(Converter&, const NodeDef&);
+Status ConvertIdentity(Converter&, const NodeDef&);  
+Status ConvertMaxPool(Converter&, const NodeDef&);
+Status ConvertPlaceholder(Converter&, const NodeDef&);
+Status ConvertRelu(Converter&, const NodeDef&);
+Status ConvertScale(Converter&, const NodeDef&);
+Status ConvertGraphToRTG(std::unique_ptr<Graph>*);
+Status ConvertGraphToRTG(std::unique_ptr<Graph>*, Cluster&);
 
 } // namspace convert
 } // namespace rtglib
