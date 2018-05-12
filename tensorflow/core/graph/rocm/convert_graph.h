@@ -38,7 +38,7 @@ struct Cluster {
      int  getSize()                       { return nodes.size();          }
      std::vector<const Edge*> input_edges;
      std::vector<const Edge*> output_edges;
-     std::vector<Node*> nodes;
+     std::vector<Node*> nodes;  // sorted in reversed post order.
      void init() {
          input_edges.clear();
          output_edges.clear();
@@ -48,30 +48,31 @@ struct Cluster {
     
 class  Converter;
 using OpConverter =
-    std::function<tensorflow::Status(Converter&, const tensorflow::NodeDef&)>;
+    std::function<tensorflow::Status(Converter&, const tensorflow::Node*)>;
     
-class Converter {
-public:
-    explicit Converter() { Init(); }
-    bool IsRegistered(const Node*);
-    rtg::shape parse_type(const Node*);
-private:
+struct Converter {
+    explicit Converter(rtg::program* p) { Init(); program = p; }
+    bool isRegistered(const Node*);
+    void add_instruction(const Node*);
+    void add_parameter(const Node*);
+    rtg::shape parse_type(const Node*, DataType&);
     std::unordered_map<string, OpConverter> op_registry_;
-     void Register_op_converters();
-     void Init() {
-         Register_op_converters();
-     }
+    void Init() {
+        register_op_converters();
+    }
+    void register_op_converters();
+    std::unordered_map<std::string, rtg::instruction*> instructions;
+    rtg::program* program;
 };
 
-Status ConvertActivation(Converter&, const NodeDef&); 
-Status ConvertBiasAdd(Converter&, const NodeDef&);
-Status ConvertConst(Converter&, const NodeDef&); 
-Status ConvertConv2D(Converter&, const NodeDef&);
-Status ConvertIdentity(Converter&, const NodeDef&);  
-Status ConvertMaxPool(Converter&, const NodeDef&);
-Status ConvertPlaceholder(Converter&, const NodeDef&);
-Status ConvertRelu(Converter&, const NodeDef&);
-Status ConvertScale(Converter&, const NodeDef&);
+Status AddActivation(Converter&, const Node*); 
+Status AddBiasAdd(Converter&, const Node*);
+Status AddConst(Converter&, const Node*); 
+Status AddConv2D(Converter&, const Node*);
+Status AddIdentity(Converter&, const Node*);  
+Status AddMaxPool(Converter&, const Node*);
+Status AddRelu(Converter&, const Node*);
+Status AddScale(Converter&, const Node*);
 Status ConvertGraphToRTG(std::unique_ptr<Graph>*);
 Status ConvertGraphToRTG(std::unique_ptr<Graph>*, Cluster&);
 

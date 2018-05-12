@@ -28,63 +28,96 @@ namespace tensorflow {
 namespace rtglib {
 namespace convert {
 
-Status ConvertPlaceholder(Converter& ctx, const NodeDef& node_def) {
-
+Status AddConv2D(Converter& ctx, const Node* node) {
+    CHECK(false);
     return Status::OK();
 }
 
-Status ConvertConv2D(Converter& ctx, const NodeDef& node_def) {
+Status AddRelu(Converter& ctx, const Node* node) {
+    CHECK(false);
     return Status::OK();
 }
 
-Status ConvertRelu(Converter& ctx, const NodeDef& node_def) {
+Status AddMaxPool(Converter& ctx, const Node* node) {
+    CHECK(false);
     return Status::OK();
 }
 
-Status ConvertMaxPool(Converter& ctx, const NodeDef& node_def) {
+Status AddBiasAdd(Converter& ctx, const Node* node) {
+    CHECK(false);
     return Status::OK();
 }
 
-Status ConvertBiasAdd(Converter& ctx, const NodeDef& node_def) {
+Status AddConst(Converter& ctx, const Node* node) {
+    const NodeDef& nodeDef = node->def();
+    const auto& tensor = nodeDef.attr().at("value").tensor();
+    auto& content = tensor.tensor_content();
+    DataType dataType;
+    rtg::shape shape = ctx.parse_type(node, dataType);
+    rtg::literal li;
+    switch (dataType) {
+    case DT_FLOAT:{
+        const float * ptr = reinterpret_cast<const float*>(content.data());
+        int size = content.size()/sizeof(float);
+        std::vector<float> data;
+        for (int i = 0; i < size; i++)
+            data.push_back(ptr[i]);
+        li = rtg::literal{shape, data.begin(), data.end()};
+        break;
+    }
+    default:
+        CHECK(false) << "unknown data type";
+    }
+    ctx.instructions[node->name()] = ctx.program->add_literal(li);
     return Status::OK();
 }
 
-Status ConvertConst(Converter& ctx, const NodeDef& node_def) {
+Status AddIdentity(Converter& ctx, const Node* node) {
+    CHECK(false);
     return Status::OK();
 }
 
-Status ConvertIdentity(Converter& ctx, const NodeDef& node_def) {
+Status AddActivation(Converter& ctx, const Node* node) {
+    CHECK(false);
     return Status::OK();
 }
 
-Status ConvertActivation(Converter& ctx, const NodeDef& node_def) {
+Status AddScale(Converter& ctx, const Node* node) {
+    CHECK(false);
     return Status::OK();
 }
 
-Status ConvertScale(Converter& ctx, const NodeDef& node_def) {
-    return Status::OK();
-}
-
-void Converter::Register_op_converters()  {
-    op_registry_["Placeholder"] = ConvertPlaceholder;
-    op_registry_["Const"] = ConvertConst;
-    op_registry_["Conv2D"] = ConvertConv2D;
-    op_registry_["BiasAdd"] = ConvertScale;
-    op_registry_["Relu"] = ConvertActivation;
+void Converter::register_op_converters()  {
+    op_registry_["Const"] = AddConst;
+    op_registry_["Conv2D"] = AddConv2D;
+    op_registry_["BiasAdd"] = AddScale;
+    op_registry_["Relu"] = AddActivation;
 #if 0    
-    op_registry_["MaxPool"] = ConvertMaxPool;
-    op_registry_["Identity"] = ConvertIdentity;
+    op_registry_["MaxPool"] = AddMaxPool;
+    op_registry_["Identity"] = AddIdentity;
 #endif    
 }
 
-bool Converter::IsRegistered(const Node * node) {
+bool Converter::isRegistered(const Node * node) {
     return op_registry_.count(node->type_string());
 }
 
-rtg::shape Converter::parse_type(const Node * node) {
+void Converter::add_parameter(const Node* node)  {
+    DataType dataType;
+    rtg::shape shape = parse_type(node, dataType);
+    const string& name = node->name();
+    instructions[name] = program->add_parameter(name, shape);
+}
+
+void Converter::add_instruction(const Node* node)  {
+    OpConverter op_converter = op_registry_.at(node->type_string());
+    Status s = op_converter(*this, node);;
+    CHECK(s == Status::OK()) << "fail to add instruction";
+}
+
+rtg::shape Converter::parse_type(const Node * node, DataType& data_type) {
     const NodeDef& nodeDef = node->def();
     std::string name = node->name();
-    DataType data_type;
     if (nodeDef.attr().count("dtype")) {
         GetNodeAttr(nodeDef, "dtype", &data_type);
     } else if (nodeDef.attr().count("T")) {
@@ -117,7 +150,8 @@ rtg::shape Converter::parse_type(const Node * node) {
             dims.push_back(tensor_shape.dim_size(i));
         }
     } else {
-        //        CHECK(false) << "value attribute is not found";
+        // shape of _Arg may not be available at compilation time.
+        CHECK(node->type_string() == "_Arg") << "unknown shape";
     }
     return {shape_type, dims};
 }
@@ -127,14 +161,17 @@ Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster) {
     if (!program)
         return errors::Internal("Fail to create RTG program");
 
-    Converter convert;
+    Converter convert(program);
     for (const Edge* edge : cluster.input_edges) {
         if (edge->IsControlEdge())
             continue;
-        const Node* srcNode = edge->src();
-        rtg::shape shape = convert.parse_type(srcNode);
+        convert.add_parameter(edge->src());
     }
 
+    for (Node* node : cluster.nodes) {
+        convert.add_instruction(node);
+    }
+    program->print();
     return Status::OK();    
 }
 
@@ -156,12 +193,12 @@ Status ConvertGraphToRTG(std::unique_ptr<Graph>* g) {
     unsigned maxClusterNum = 0;
     std::vector<Node *> rpOrder;
     GetReversePostOrder(graph, &rpOrder);
-    Converter convert;
+    Converter convert(nullptr);
 
     for (Node* n : rpOrder) {
         int id = n->id();
         id2Order[id] = maxNodeNum++;
-        id2Candidate[id] = (n->IsOp() && convert.IsRegistered(n)) ? true : false;
+        id2Candidate[id] = (n->IsOp() && convert.isRegistered(n)) ? true : false;
         id2Mask[id] = 0;
     }
 
