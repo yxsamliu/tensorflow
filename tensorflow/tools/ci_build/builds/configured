@@ -51,8 +51,12 @@ elif [ "${CONTAINER_TYPE}" == "gpu_clang" ]; then
   export TF_NEED_CUDA=1
   export TF_CUDA_CLANG=1
   export CLANG_CUDA_COMPILER_PATH="/usr/local/bin/clang"
+elif [ "${CONTAINER_TYPE}" == "rocm" ]; then
+  export TF_NEED_CUDA=0
+  export TF_NEED_ROCM=1
 else
   export TF_NEED_CUDA=0
+  export TF_NEED_ROCM=0
 fi
 
 pushd "${CI_TENSORFLOW_SUBMODULE_PATH:-.}"

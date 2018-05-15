@@ -18,7 +18,7 @@
 #                    <COMMAND>
 #
 # CONTAINER_TYPE: Type of the docker container used the run the build:
-#                 e.g., (cpu | gpu | gpu_clang | android | tensorboard)
+#                 e.g., (cpu | gpu | gpu_clang | rocm | android | tensorboard)
 #
 # DOCKERFILE_PATH: (Optional) Path to the Dockerfile used for docker build.
 #                  If this optional value is not supplied (via the
@@ -106,6 +106,8 @@ BUILD_TAG="${BUILD_TAG:-tf_ci}"
 # And clear them if we are not building for GPU.
 if [[ "${CONTAINER_TYPE}" != "gpu" ]] && [[ "${CONTAINER_TYPE}" != "gpu_clang" ]]; then
   GPU_EXTRA_PARAMS=""
+elif [[ "${CONTAINER_TYPE}" != "rocm" ]]; then
+  ROCM_EXTRA_PARAMS=""
 fi
 
 # Determine the docker image name
@@ -156,6 +158,7 @@ ${DOCKER_BINARY} run --rm --pid=host \
     -v ${WORKSPACE}:/workspace \
     -w /workspace \
     ${GPU_EXTRA_PARAMS} \
+    ${ROCM_EXTRA_PARAMS} \
     ${CI_DOCKER_EXTRA_PARAMS[@]} \
     "${DOCKER_IMG_NAME}" \
     ${CI_COMMAND_PREFIX[@]} \
