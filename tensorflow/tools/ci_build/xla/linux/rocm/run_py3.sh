@@ -33,11 +33,10 @@ export TF_NEED_ROCM=1
 export TF_ENABLE_XLA=1
 #export TF_CUDA_COMPUTE_CAPABILITIES=3.7
 
-# FIXME(parallelo): fix configure and bazel
 yes "" | ./configure
 
 # Run bazel test command. Double test timeouts to avoid flakes.
-bazel test --config=cuda --test_tag_filters=-no_gpu,-benchmark-test -k \
+bazel test --config=rocm --test_tag_filters=-no_gpu,-benchmark-test -k \
     --jobs=${N_JOBS} --test_timeout 300,450,1200,3600 \
     --build_tests_only --test_output=errors --local_test_jobs=8 \
     --run_under=//tensorflow/tools/ci_build/gpu_build:parallel_gpu_execute -- \
