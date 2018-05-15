@@ -72,7 +72,7 @@ ENV PATH="$ROCM_PATH/bin:${PATH}"
 ENV PATH="$OPENCL_ROOT/bin:${PATH}"
 
 # Add target file to help determine which device(s) to build for
-ADD third_party/gpus/rocm/target.lst /opt/rocm/bin
+ADD ./target.lst /opt/rocm/bin
 
 # Build HCC from source, cleanup the default HCC to avoid issue
 #RUN rm -rf /opt/rocm/hcc-1.0 && rm -rf /opt/rocm/lib/*.bc
