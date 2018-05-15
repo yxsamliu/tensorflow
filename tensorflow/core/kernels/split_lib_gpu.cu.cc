@@ -110,7 +110,7 @@ __global__ void SplitOpKernel(const T* input, int32 prefix_dim_size,
 template <typename T, typename IntType, bool useSmem>
 __global__ void split_v_kernel(const T* input_ptr,
                                GpuDeviceArrayStruct<IntType> output_scan,
-                               IntType total_rows, IntType total_cols,
+                               int total_rows, int total_cols,
                                GpuDeviceArrayStruct<T*> output_ptr_data) {
   T** output_ptrs = GetGpuDeviceArrayOnDevice(&output_ptr_data);
   IntType* col_scan = GetGpuDeviceArrayOnDevice(&output_scan);

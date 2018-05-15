@@ -1462,7 +1462,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/Eigen/src/Core/arch/HIP/hcc/PacketMath
 +#endif // EIGEN_PACKET_MATH_HIP_H
 diff -Naur eigen/eigen-eigen-429aa5254200/Eigen/src/Core/arch/HIP/hcc/PacketMathHalf.h eigen_archive/Eigen/src/Core/arch/HIP/hcc/PacketMathHalf.h
 --- eigen/eigen-eigen-429aa5254200/Eigen/src/Core/arch/HIP/hcc/PacketMathHalf.h	1969-12-31 19:00:00.000000000 -0500
-+++ eigen_archive/Eigen/src/Core/arch/HIP/hcc/PacketMathHalf.h	2018-04-30 11:34:28.798798275 -0400
++++ eigen_archive/Eigen/src/Core/arch/HIP/hcc/PacketMathHalf.h	2018-05-14 14:25:23.691689009 -0400
 @@ -0,0 +1,628 @@
 +// This file is part of Eigen, a lightweight C++ template library
 +// for linear algebra.
@@ -1481,7 +1481,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/Eigen/src/Core/arch/HIP/hcc/PacketMath
 +namespace internal {
 +
 +// Most of the following operations require arch >= 3.0
-+#if defined(EIGEN_HAS_HIP_FP16_HALF)
++#if defined(EIGEN_HAS_HIP_FP16)
 +
 +template<> struct is_arithmetic<half2> { enum { value = true }; };
 +
@@ -1508,7 +1508,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/Eigen/src/Core/arch/HIP/hcc/PacketMath
 +template<> struct unpacket_traits<half2> { typedef Eigen::half type; enum {size=2, alignment=Aligned16}; typedef half2 half; };
 +
 +template<> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE half2 pset1<half2>(const Eigen::half& from) {
-+  return __half2half2(from.x);
++  return half2half2(from.x);
 +}
 +
 +template<> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE half2 pload<half2>(const Eigen::half* from) {
@@ -1558,9 +1558,9 @@ diff -Naur eigen/eigen-eigen-429aa5254200/Eigen/src/Core/arch/HIP/hcc/PacketMath
 +}
 +
 +template<> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE half2 pabs<half2>(const half2& a) {
-+  half2 result;
-+  result.x = a.x & 0x7FFF7FFF;
-+  return result;
++  __half x = __ushort_as_half(__half_as_ushort(__low2half(a)) & 0x7FFF);
++  __half y = __ushort_as_half(__half_as_ushort(__high2half(a)) & 0x7FFF);
++  return __halves2half2(x, y);
 +}
 +
 +
@@ -1601,7 +1601,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/Eigen/src/Core/arch/HIP/hcc/PacketMath
 +}
 +
 +template<> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE half2 pdiv<half2>(const half2& a, const half2& b) {
-+  return h2div(r1, r2);
++  return h2div(a, b);
 +}
 +
 +template<> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE half2 pmin<half2>(const half2& a, const half2& b) {
@@ -1615,41 +1615,41 @@ diff -Naur eigen/eigen-eigen-429aa5254200/Eigen/src/Core/arch/HIP/hcc/PacketMath
 +}
 +
 +template<> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE half2 pmax<half2>(const half2& a, const half2& b) {
-+  float a1 = _low2float(a);
-+  float a2 = _high2float(a);
-+  float b1 = _low2float(b);
-+  float b2 = _high2float(b);
-+  __half r1 = a1 > b1 ? _low2half(a) : _low2half(b);
-+  __half r2 = a2 > b2 ? _high2half(a) : _high2half(b);
++  float a1 = __low2float(a);
++  float a2 = __high2float(a);
++  float b1 = __low2float(b);
++  float b2 = __high2float(b);
++  __half r1 = a1 > b1 ? __low2half(a) : __low2half(b);
++  __half r2 = a2 > b2 ? __high2half(a) : __high2half(b);
 +  return __halves2half2(r1, r2);
 +}
 +
 +template<> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Eigen::half predux<half2>(const half2& a) {
-+  return _hadd(_low2half(a), _high2half(a));
++  return __hadd(__low2half(a), __high2half(a));
 +}
 +
 +template<> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Eigen::half predux_max<half2>(const half2& a) {
-+  _half first = _low2half(a);
-+  _half second = _high2half(a);
-+  return _hgt(first, second) ? first : second;
++  __half first = __low2half(a);
++  __half second = __high2half(a);
++  return __hgt(first, second) ? first : second;
 +}
 +
 +template<> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Eigen::half predux_min<half2>(const half2& a) {
-+  _half first = _low2half(a);
-+  _half second = _high2half(a);
-+  return _hlt(first, second) ? first : second;
++  __half first = __low2half(a);
++  __half second = __high2half(a);
++  return __hlt(first, second) ? first : second;
 +}
 +
 +template<> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Eigen::half predux_mul<half2>(const half2& a) {
-+  return _hmul(_low2half(a), _high2half(a));
++  return __hmul(__low2half(a), __high2half(a));
 +}
 +
 +template<> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE half2 plog1p<half2>(const half2& a) {
-+  float a1 = _low2float(a);
-+  float a2 = _high2float(a);
++  float a1 = __low2float(a);
++  float a2 = __high2float(a);
 +  float r1 = log1pf(a1);
 +  float r2 = log1pf(a2);
-+  return _floats2half2_rn(r1, r2);
++  return __floats2half2_rn(r1, r2);
 +}
 +
 +template<>  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
@@ -5227,8 +5227,8 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
  #elif defined(EIGEN_USE_SYCL)
 diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorReductionHip.h eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorReductionHip.h
 --- eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/TensorReductionHip.h	1969-12-31 19:00:00.000000000 -0500
-+++ eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorReductionHip.h	2018-04-30 10:51:00.550780973 -0400
-@@ -0,0 +1,810 @@
++++ eigen_archive/unsupported/Eigen/CXX11/src/Tensor/TensorReductionHip.h	2018-05-14 14:50:41.723721942 -0400
+@@ -0,0 +1,822 @@
 +//#include "hip/hip_runtime.h"
 +// This file is part of Eigen, a lightweight C++ template library
 +// for linear algebra.
@@ -5326,7 +5326,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +  #endif
 +}
 +
-+#ifdef EIGEN_HAS_HIP_FP16_HALF
++#ifdef EIGEN_HAS_HIP_FP16
 +template <template <typename T> class R>
 +__device__ inline void atomicReduce(half2* output, half2 accum, R<half>& reducer) {
 +  unsigned int oldval = *reinterpret_cast<unsigned int*>(output);
@@ -5440,7 +5440,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +}
 +
 +
-+#ifdef EIGEN_HAS_HIP_FP16_HALF
++#ifdef EIGEN_HAS_HIP_FP16
 +template <typename Self,
 +          typename Reducer, typename Index>
 +__global__ void ReductionInitFullReduxKernelHalfFloat(Reducer reducer, const Self input, Index num_coeffs, half2* scratch) {
@@ -5481,7 +5481,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +  if (hipGridDim_x == 1 && first_index == 0) {
 +    if (num_coeffs % 2 != 0) {
 +      half last = input.m_impl.coeff(num_coeffs-1);
-+      *scratch = __halves2half2(last, reducer.initialize());
++      *scratch = __halves2half2(last.x, reducer.initialize().x);
 +    } else {
 +      *scratch = reducer.template initializePacket<half2>();
 +    }
@@ -5499,7 +5499,11 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +
 +#pragma unroll
 +  for (int offset = HIP_WARP_SIZE/2; offset > 0; offset /= 2) {
-+    reducer.reducePacket(__shfl_down(accum, offset, HIP_WARP_SIZE), &accum);
++    // FIXME : remove this workaround once we have native half/half2 support for __shfl_down
++    union { int i; half2 h; } wka_in, wka_out;
++    wka_in.h = accum;
++    wka_out.i = __shfl_down(wka_in.i, offset, HIP_WARP_SIZE);
++    reducer.reducePacket(wka_out.h, &accum);
 +  }
 +
 +  if ((hipThreadIdx_x & (HIP_WARP_SIZE - 1)) == 0) {
@@ -5586,7 +5590,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +  }
 +};
 +
-+#ifdef EIGEN_HAS_HIP_FP16_HALF
++#ifdef EIGEN_HAS_HIP_FP16
 +template <typename Self, typename Op>
 +struct FullReductionLauncher<Self, Op, Eigen::half, false> {
 +  static void run(const Self&, Op&, const GpuDevice&, half*, typename Self::Index) {
@@ -5729,7 +5733,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +#endif
 +}
 +
-+#ifdef EIGEN_HAS_HIP_FP16_HALF
++#ifdef EIGEN_HAS_HIP_FP16
 +
 +template <int NumPerThread, typename Self,
 +          typename Reducer, typename Index>
@@ -5806,8 +5810,16 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +
 +#pragma unroll
 +      for (int offset = HIP_WARP_SIZE/2; offset > 0; offset /= 2) {
-+        reducer.reducePacket(__shfl_down(reduced_val1, offset, HIP_WARP_SIZE), &reduced_val1);
-+        reducer.reducePacket(__shfl_down(reduced_val2, offset, HIP_WARP_SIZE), &reduced_val2);
++	// FIXME : remove this workaround once we have native half/half2 support for __shfl_down
++	union { int i; half2 h; } wka_in, wka_out;
++
++	wka_in.h = reduced_val1;
++	wka_out.i = __shfl_down(wka_in.i, offset, HIP_WARP_SIZE);
++        reducer.reducePacket(wka_out.h, &reduced_val1);
++	
++	wka_in.h = reduced_val2;
++	wka_out.i = __shfl_down(wka_in.i, offset, HIP_WARP_SIZE);
++        reducer.reducePacket(wka_out.h, &reduced_val2);
 +      }
 +
 +      half val1 =  __low2half(reduced_val1);
@@ -5873,7 +5885,7 @@ diff -Naur eigen/eigen-eigen-429aa5254200/unsupported/Eigen/CXX11/src/Tensor/Ten
 +  }
 +};
 +
-+#ifdef EIGEN_HAS_HIP_FP16_HALF
++#ifdef EIGEN_HAS_HIP_FP16
 +template <typename Self, typename Op>
 +struct InnerReductionLauncher<Self, Op, Eigen::half, false> {
 +  static bool run(const Self&, Op&, const GpuDevice&, half*, typename Self::Index, typename Self::Index) {
