@@ -134,7 +134,7 @@ RUN cd $HOME && wget https://github.com/bazelbuild/bazel/releases/download/0.4.5
 RUN bash $HOME/bazel*.sh
 
 # Clone TF
-RUN cd $HOME && git clone -b jenkins https://github.com/parallelo/tensorflow.git
+RUN cd $HOME && git clone -b jenkins-tf https://github.com/parallelo/tensorflow.git
 WORKDIR $HOME/tensorflow
 
 # Build TF for python2 & python3 
