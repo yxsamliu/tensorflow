@@ -424,6 +424,7 @@ Status SimpleGraphExecutionState::BuildGraph(
   optimization_options.flib_def = flib.get();
   optimization_options.device_set = device_set_;
   optimization_options.cost_model = &costs;
+  optimization_options.inputs = inputs_;
 
   TF_RETURN_IF_ERROR(OptimizationPassRegistry::Global()->RunGrouping(
       OptimizationPassRegistry::POST_REWRITE_FOR_EXEC, optimization_options));

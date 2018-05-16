@@ -456,6 +456,7 @@ Status DirectSession::Run(const RunOptions& run_options,
     return errors::InvalidArgument("Invalid inter_op_thread_pool: ",
                                    run_options.inter_op_thread_pool());
   }
+
   thread::ThreadPool* pool =
       thread_pools_[run_options.inter_op_thread_pool()].first;
 
@@ -465,7 +466,9 @@ Status DirectSession::Run(const RunOptions& run_options,
 
   Executor::Args args;
   args.step_id = step_id_counter_.fetch_add(1);
-
+  SimpleGraphExecutionState* execution_state = execution_state_.get();
+  if (execution_state != nullptr)
+      execution_state->SetInputs(&inputs);
   TF_RETURN_IF_ERROR(
       GetOrCreateExecutors(pool, input_tensor_names, output_names, target_nodes,
                            &executors_and_keys, &run_state_args));
@@ -1117,6 +1120,7 @@ Status DirectSession::GetOrCreateExecutors(
 
   // The executor_lock_ is intentionally released while executor is
   // being created.
+
   std::unordered_map<string, std::unique_ptr<Graph>> graphs;
   TF_RETURN_IF_ERROR(CreateGraphs(options, &graphs, &ek->flib_def,
                                   run_state_args, &ek->input_types,

@@ -27,6 +27,7 @@ cc_library(
         "lib/gtl/*.h",
         "platform/**/*.h",
     ]),
+    copts = ["-g", "-O0"],
     linkopts = select({
         "//tensorflow:freebsd": [],
         "//conditions:default": ["-ldl"],
@@ -50,6 +51,7 @@ cc_library(
             exclude = ["cuda/cuda_platform_id.cc"],
         ),
     ),
+    copts = ["-g", "-O0"],
     linkopts = select({
         "//tensorflow:freebsd": [],
         "//conditions:default": ["-ldl"],

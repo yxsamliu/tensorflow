@@ -19,6 +19,8 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/graph_optimizer.h"
 #include "tensorflow/core/common_runtime/optimization_registry.h"
 #include "tensorflow/core/graph/algorithm.h"
+#include "tensorflow/core/grappler/grappler_item.h"
+#include "tensorflow/core/grappler/costs/graph_properties.h"
 #include "convert_graph.h"
 
 
@@ -49,8 +51,21 @@ Status ROCmPass::Run(
     auto convertGraph = [&](std::unique_ptr<Graph>* g) {
         // Get the ownership of a graph
         std::unique_ptr<Graph>* ng = std::move(g);
+#if 0        
+        Graph& graph = **ng;
+        grappler::GrapplerItem item;
+        std::vector<string> output_names;
+        output_names.push_back(graph.sink_node()->name());
+        item.fetch = output_names;
+        GraphDef gdef;
+        graph.ToGraphDef(&gdef);
+        item.graph = gdef;
         // TODO: invoke grappler optimizer to do some pre-optimizations.
-        tensorflow::rtglib::convert::ConvertGraphToRTG(ng);
+        // Infer static graph properties.
+         grappler::GraphProperties static_graph_properties(item);
+        TF_RETURN_IF_ERROR(static_graph_properties.InferStatically());
+#endif        
+        tensorflow::rtglib::convert::ConvertGraphToRTG(ng, options.inputs);;
         // Return the ownership of a graph back
         g->reset(ng->release());
     };

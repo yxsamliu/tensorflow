@@ -28,27 +28,26 @@ namespace tensorflow {
 namespace rtglib {
 namespace convert {
 
-Status AddConv2D(Converter& ctx, const Node* node) {
+Status AddConv2D(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
+    return Status::OK();
+}
+
+Status AddRelu(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
     CHECK(false);
     return Status::OK();
 }
 
-Status AddRelu(Converter& ctx, const Node* node) {
+Status AddMaxPool(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
     CHECK(false);
     return Status::OK();
 }
 
-Status AddMaxPool(Converter& ctx, const Node* node) {
+Status AddBiasAdd(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
     CHECK(false);
     return Status::OK();
 }
 
-Status AddBiasAdd(Converter& ctx, const Node* node) {
-    CHECK(false);
-    return Status::OK();
-}
-
-Status AddConst(Converter& ctx, const Node* node) {
+Status AddConst(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
     const NodeDef& nodeDef = node->def();
     const auto& tensor = nodeDef.attr().at("value").tensor();
     auto& content = tensor.tensor_content();
@@ -72,17 +71,17 @@ Status AddConst(Converter& ctx, const Node* node) {
     return Status::OK();
 }
 
-Status AddIdentity(Converter& ctx, const Node* node) {
+Status AddIdentity(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
     CHECK(false);
     return Status::OK();
 }
 
-Status AddActivation(Converter& ctx, const Node* node) {
+Status AddActivation(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
     CHECK(false);
     return Status::OK();
 }
 
-Status AddScale(Converter& ctx, const Node* node) {
+Status AddScale(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
     CHECK(false);
     return Status::OK();
 }
@@ -90,9 +89,9 @@ Status AddScale(Converter& ctx, const Node* node) {
 void Converter::register_op_converters()  {
     op_registry_["Const"] = AddConst;
     op_registry_["Conv2D"] = AddConv2D;
-    op_registry_["BiasAdd"] = AddScale;
     op_registry_["Relu"] = AddActivation;
-#if 0    
+#if 0
+    op_registry_["BiasAdd"] = AddScale;
     op_registry_["MaxPool"] = AddMaxPool;
     op_registry_["Identity"] = AddIdentity;
 #endif    
@@ -111,7 +110,8 @@ void Converter::add_parameter(const Node* node)  {
 
 void Converter::add_instruction(const Node* node)  {
     OpConverter op_converter = op_registry_.at(node->type_string());
-    Status s = op_converter(*this, node);;
+    T_RTG_SHAPE_V inputs, outputs;
+    Status s = op_converter(*this, node, inputs, &outputs);;
     CHECK(s == Status::OK()) << "fail to add instruction";
 }
 
@@ -146,22 +146,28 @@ rtg::shape Converter::parse_type(const Node * node, DataType& data_type) {
         DataType d_type = raw_val.dtype();
         CHECK(data_type == d_type) << "data type unmatched";
         const TensorShape& tensor_shape = raw_val.tensor_shape();
-        for (int64 i = 0, e = tensor_shape.dims(); i < e; i++) {
-            dims.push_back(tensor_shape.dim_size(i));
-        }
+        for (int64 i = 0, e = tensor_shape.dims(); i < e; i++)
+            dims.push_back(tensor_shape.dim_size(i));    
     } else {
-        // shape of _Arg may not be available at compilation time.
         CHECK(node->type_string() == "_Arg") << "unknown shape";
+        CHECK(nodeDef.attr().count("index")) << "unknown argument index";
+        int index;
+        GetNodeAttr(nodeDef, "index", &index);
+        const Tensor tensor = (*inputs)[index].second;
+        const TensorShape& tensor_shape = tensor.shape();
+        for (int64 i = 0, e = tensor_shape.dims(); i < e; i++)
+            dims.push_back(tensor_shape.dim_size(i));
     }
+    
     return {shape_type, dims};
 }
 
-Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster) {
+Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT_MAP * inputs) {
     rtg::program * program = new rtg::program;
     if (!program)
         return errors::Internal("Fail to create RTG program");
 
-    Converter convert(program);
+    Converter convert(program, inputs);
     for (const Edge* edge : cluster.input_edges) {
         if (edge->IsControlEdge())
             continue;
@@ -175,7 +181,7 @@ Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster) {
     return Status::OK();    
 }
 
-Status ConvertGraphToRTG(std::unique_ptr<Graph>* g) {
+Status ConvertGraphToRTG(std::unique_ptr<Graph>* g, T_INPUT_MAP* inputs) {
     CHECK_NOTNULL(g);
     const Graph& graph = **g;
     RTGLIB::dump_graph::DumpGraphToFile("Before convert graph to RTG", graph);
@@ -193,7 +199,7 @@ Status ConvertGraphToRTG(std::unique_ptr<Graph>* g) {
     unsigned maxClusterNum = 0;
     std::vector<Node *> rpOrder;
     GetReversePostOrder(graph, &rpOrder);
-    Converter convert(nullptr);
+    Converter convert(nullptr, nullptr);
 
     for (Node* n : rpOrder) {
         int id = n->id();
@@ -302,7 +308,7 @@ Status ConvertGraphToRTG(std::unique_ptr<Graph>* g) {
             Cluster& cluster = clusters[id];
             if (cluster.getSize() < MIN_CLUSTER_SIZE)
                 continue;
-            ConvertSubgraphToRTG(g, cluster);
+            ConvertSubgraphToRTG(g, cluster, inputs);
         }
     }
 

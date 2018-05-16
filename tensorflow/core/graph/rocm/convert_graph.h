@@ -44,14 +44,19 @@ struct Cluster {
          output_edges.clear();
          nodes.clear();
      }
-};    
-    
+};
+
+typedef std::vector<rtg::shape> T_RTG_SHAPE_V;
+typedef const std::vector<std::pair<string, Tensor>> T_INPUT_MAP; 
+ 
 class  Converter;
 using OpConverter =
-    std::function<tensorflow::Status(Converter&, const tensorflow::Node*)>;
+    std::function<tensorflow::Status(Converter&, const tensorflow::Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*)>;
     
 struct Converter {
-    explicit Converter(rtg::program* p) { Init(); program = p; }
+    explicit Converter(rtg::program* p, T_INPUT_MAP* map) {
+        Init(); program = p; inputs = map;
+    }
     bool isRegistered(const Node*);
     void add_instruction(const Node*);
     void add_parameter(const Node*);
@@ -62,19 +67,21 @@ struct Converter {
     }
     void register_op_converters();
     std::unordered_map<std::string, rtg::instruction*> instructions;
+    std::unordered_map<std::string, T_RTG_SHAPE_V> shapes;
     rtg::program* program;
+    T_INPUT_MAP* inputs;
 };
 
-Status AddActivation(Converter&, const Node*); 
-Status AddBiasAdd(Converter&, const Node*);
-Status AddConst(Converter&, const Node*); 
-Status AddConv2D(Converter&, const Node*);
-Status AddIdentity(Converter&, const Node*);  
-Status AddMaxPool(Converter&, const Node*);
-Status AddRelu(Converter&, const Node*);
-Status AddScale(Converter&, const Node*);
-Status ConvertGraphToRTG(std::unique_ptr<Graph>*);
-Status ConvertGraphToRTG(std::unique_ptr<Graph>*, Cluster&);
+Status AddActivation(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
+Status AddBiasAdd(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
+Status AddConst(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
+Status AddConv2D(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
+Status AddIdentity(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
+Status AddMaxPool(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
+Status AddRelu(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
+Status AddScale(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
+Status ConvertGraphToRTG(std::unique_ptr<Graph>*, T_INPUT_MAP*);
+Status ConvertSubGraphToRTG(std::unique_ptr<Graph>*, Cluster&, T_INPUT_MAP*);
 
 } // namspace convert
 } // namespace rtglib

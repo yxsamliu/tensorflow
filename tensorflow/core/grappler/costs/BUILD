@@ -38,6 +38,7 @@ cc_library(
     srcs = ["graph_properties.cc"],
     hdrs = ["graph_properties.h"],
     visibility = ["//visibility:public"],
+    copts = ["-g", "-Og"],
     deps = [
         ":op_performance_data_cc",
         ":utils",
