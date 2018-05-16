@@ -139,10 +139,10 @@ WORKDIR $HOME/tensorflow
 
 # Build TF for python2 & python3 
 ARG PYTHON_BIN_PATH=/usr/bin/python2
-RUN cat $HOME/tensorflow/third_party/gpus/rocm/configure_input | ./configure
+RUN yes "" | ./configure
 RUN bash $HOME/tensorflow/build
 ARG PYTHON_BIN_PATH=/usr/bin/python3
-RUN cat $HOME/tensorflow/third_party/gpus/rocm/configure_input | ./configure
+RUN yes "" | ./configure
 RUN bash $HOME/tensorflow/build_python3
 
 # Clone hiptf models and benchmarks
