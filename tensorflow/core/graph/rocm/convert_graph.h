@@ -67,7 +67,7 @@ struct Converter {
     }
     void register_op_converters();
     std::unordered_map<std::string, rtg::instruction*> instructions;
-    std::unordered_map<std::string, T_RTG_SHAPE_V> shapes;
+    std::unordered_map<std::string, rtg::shape> shapes;
     rtg::program* program;
     T_INPUT_MAP* inputs;
 };

@@ -103,14 +103,22 @@ bool Converter::isRegistered(const Node * node) {
 
 void Converter::add_parameter(const Node* node)  {
     DataType dataType;
-    rtg::shape shape = parse_type(node, dataType);
+    const rtg::shape shape = parse_type(node, dataType);
     const string& name = node->name();
     instructions[name] = program->add_parameter(name, shape);
+    shapes[name] = shape;
 }
 
 void Converter::add_instruction(const Node* node)  {
     OpConverter op_converter = op_registry_.at(node->type_string());
     T_RTG_SHAPE_V inputs, outputs;
+    for (const Edge* edge : node->in_edges()) {
+        if (edge->IsControlEdge())
+            continue;
+        const string& name = node->name();
+        CHECK(shapes.find(name) != shapes.end()) << "missing input shape";
+        inputs.push_back(shapes[name]);
+    }
     Status s = op_converter(*this, node, inputs, &outputs);;
     CHECK(s == Status::OK()) << "fail to add instruction";
 }
