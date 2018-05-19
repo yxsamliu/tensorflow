@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/framework/node_def.pb.h"
+#include "tensorflow/core/framework/tensor_shape.pb.h"
 #include "tensorflow/core/framework/node_def_builder.h"
 
 #include "rocm/include/rtg/program.hpp"
@@ -46,42 +47,46 @@ struct Cluster {
      }
 };
 
-typedef std::vector<rtg::shape> T_RTG_SHAPE_V;
+typedef std::vector<rtg::instruction*> T_RTG_INST_V; 
 typedef const std::vector<std::pair<string, Tensor>> T_INPUT_MAP; 
  
 class  Converter;
 using OpConverter =
-    std::function<tensorflow::Status(Converter&, const tensorflow::Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*)>;
+    std::function<tensorflow::Status(Converter&, const tensorflow::NodeDef&, const T_RTG_INST_V&)>;
     
 struct Converter {
     explicit Converter(rtg::program* p, T_INPUT_MAP* map) {
         Init(); program = p; inputs = map;
     }
+    bool isParameter(const rtg::instruction&);
     bool isRegistered(const Node*);
     void add_instruction(const Node*);
-    void add_parameter(const Node*);
-    rtg::shape parse_type(const Node*, DataType&);
+    void add_parameter(const NodeDef&);
+    DataType get_type(const rtg::shape&);
+    void get_shape_proto(const rtg::shape&, TensorShapeProto*);
+    rtg::shape parse_type(const NodeDef&, DataType&);
     std::unordered_map<string, OpConverter> op_registry_;
     void Init() {
         register_op_converters();
     }
     void register_op_converters();
+    bool starts_with(const string& value, const string& prefix);
     std::unordered_map<std::string, rtg::instruction*> instructions;
-    std::unordered_map<std::string, rtg::shape> shapes;
     rtg::program* program;
     T_INPUT_MAP* inputs;
 };
 
-Status AddActivation(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
-Status AddBiasAdd(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
-Status AddConst(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
-Status AddConv2D(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
-Status AddIdentity(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
-Status AddMaxPool(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
-Status AddRelu(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
-Status AddScale(Converter&, const Node*, const T_RTG_SHAPE_V&, T_RTG_SHAPE_V*);
+Status AddActivation(Converter&, const NodeDef&, const T_RTG_INST_V&);
+Status AddBiasAdd(Converter&, const NodeDef&, const T_RTG_INST_V&);
+Status AddConst(Converter&, const NodeDef&, const T_RTG_INST_V&);
+Status AddConv2D(Converter&, const NodeDef&, const T_RTG_INST_V&);
+Status AddIdentity(Converter&, const NodeDef&, const T_RTG_INST_V&);
+Status AddMaxPool(Converter&, const NodeDef&, const T_RTG_INST_V&);
+Status AddRelu(Converter&, const NodeDef&, const T_RTG_INST_V&);
+Status AddScale(Converter&, const NodeDef&, const T_RTG_INST_V&);
 Status ConvertGraphToRTG(std::unique_ptr<Graph>*, T_INPUT_MAP*);
 Status ConvertSubGraphToRTG(std::unique_ptr<Graph>*, Cluster&, T_INPUT_MAP*);
+Status RTGToString(Converter&);
 
 } // namspace convert
 } // namespace rtglib

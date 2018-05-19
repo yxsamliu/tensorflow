@@ -19,6 +19,8 @@ limitations under the License.
 #include "tensorflow/core/graph/algorithm.h"
 #include "convert_graph.h"
 #include "dump_graph.h"
+#include "rocm/include/rtg/operators.hpp"
+
 #include <stack>
 #include <unordered_map>
 
@@ -28,31 +30,48 @@ namespace tensorflow {
 namespace rtglib {
 namespace convert {
 
-Status AddConv2D(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
+Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
+    rtg::convolution op;
+    string data_format;
+    TF_RETURN_IF_ERROR(GetNodeAttr(nodeDef, "data_format", &data_format));
+    int h_index = 2;
+    int w_index = 3;
+    if (ctx.starts_with(data_format, "NHWC")) {
+        h_index = 1;
+        w_index = 2;
+    } else if (ctx.starts_with(data_format, "NCHW")) {
+        CHECK(false) << "Unknown data format";
+    }
+    auto list = nodeDef.attr().at("strides").list();
+    std::vector<int> strides;
+    strides.push_back(list.i(h_index));
+    strides.push_back(list.i(w_index));
+    std::copy(strides.begin(), strides.end(), op.stride.begin());
+    // TODO: padding, dilations.
+    ctx.instructions[nodeDef.name()] = ctx.program->add_instruction(op, inputs);
     return Status::OK();
 }
 
-Status AddRelu(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
+Status AddRelu(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
     CHECK(false);
     return Status::OK();
 }
 
-Status AddMaxPool(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
+Status AddMaxPool(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
     CHECK(false);
     return Status::OK();
 }
 
-Status AddBiasAdd(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
+Status AddBiasAdd(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
     CHECK(false);
     return Status::OK();
 }
 
-Status AddConst(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
-    const NodeDef& nodeDef = node->def();
+Status AddConst(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
     const auto& tensor = nodeDef.attr().at("value").tensor();
     auto& content = tensor.tensor_content();
     DataType dataType;
-    rtg::shape shape = ctx.parse_type(node, dataType);
+    rtg::shape shape = ctx.parse_type(nodeDef, dataType);
     rtg::literal li;
     switch (dataType) {
     case DT_FLOAT:{
@@ -67,21 +86,21 @@ Status AddConst(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T
     default:
         CHECK(false) << "unknown data type";
     }
-    ctx.instructions[node->name()] = ctx.program->add_literal(li);
+    ctx.instructions[nodeDef.name()] = ctx.program->add_literal(li);
     return Status::OK();
 }
 
-Status AddIdentity(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
+Status AddIdentity(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
     CHECK(false);
     return Status::OK();
 }
 
-Status AddActivation(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
-    CHECK(false);
+Status AddActivation(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
+    ctx.instructions[nodeDef.name()] = ctx.program->add_instruction(rtg::activation{"relu"}, inputs);
     return Status::OK();
 }
 
-Status AddScale(Converter& ctx, const Node* node, const T_RTG_SHAPE_V& inputs, T_RTG_SHAPE_V* outputs) {
+Status AddScale(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
     CHECK(false);
     return Status::OK();
 }
@@ -97,35 +116,72 @@ void Converter::register_op_converters()  {
 #endif    
 }
 
+bool Converter::starts_with(const string& value, const string& prefix)
+{
+    if (prefix.size() <= value.size()) {
+        return std::equal(prefix.begin(), prefix.end(), value.begin());
+    }
+    return false;
+}
+
+bool Converter::isParameter(const rtg::instruction& ins)
+{
+    string name = ins.op.name();
+    return starts_with(name, "@param");
+}
+    
 bool Converter::isRegistered(const Node * node) {
     return op_registry_.count(node->type_string());
 }
 
-void Converter::add_parameter(const Node* node)  {
+void Converter::add_parameter(const NodeDef& nodeDef)  {
     DataType dataType;
-    const rtg::shape shape = parse_type(node, dataType);
-    const string& name = node->name();
+    const rtg::shape shape = parse_type(nodeDef, dataType);
+    const string& name = nodeDef.name();
     instructions[name] = program->add_parameter(name, shape);
-    shapes[name] = shape;
 }
 
 void Converter::add_instruction(const Node* node)  {
     OpConverter op_converter = op_registry_.at(node->type_string());
-    T_RTG_SHAPE_V inputs, outputs;
+    T_RTG_INST_V inputs;
     for (const Edge* edge : node->in_edges()) {
         if (edge->IsControlEdge())
             continue;
-        const string& name = node->name();
-        CHECK(shapes.find(name) != shapes.end()) << "missing input shape";
-        inputs.push_back(shapes[name]);
+        const string& name = edge->src()->name();
+        CHECK(instructions.find(name) != instructions.end()) << "missing input instruction";
+        inputs.push_back(instructions[name]);
     }
-    Status s = op_converter(*this, node, inputs, &outputs);;
+    Status s = op_converter(*this, node->def(), inputs);;
     CHECK(s == Status::OK()) << "fail to add instruction";
 }
 
-rtg::shape Converter::parse_type(const Node * node, DataType& data_type) {
-    const NodeDef& nodeDef = node->def();
-    std::string name = node->name();
+DataType Converter::get_type(const rtg::shape& shape)
+{
+    rtg::shape::type_t shape_type = shape.type();
+    switch (shape_type) {
+    case rtg::shape::float_type: return DT_FLOAT; break;
+    case rtg::shape::double_type: return DT_DOUBLE; break;
+    case rtg::shape::int64_type: return DT_INT64; break;
+    case rtg::shape::int32_type: return DT_INT32; break;
+    case rtg::shape::int16_type: return DT_INT16; break;
+    case rtg::shape::uint16_type: return DT_UINT16; break;
+    case rtg::shape::int8_type: return DT_INT8; break;
+    default:
+        CHECK(false) << "unmatched RTG data type";
+    }
+}
+
+void Converter::get_shape_proto(const rtg::shape& shape, TensorShapeProto * proto)
+{
+    proto->Clear();
+    const std::vector<std::size_t>& lens = shape.lens();
+    for (auto size : lens) {
+        proto->add_dim()->set_size(size);
+    }
+}
+    
+rtg::shape Converter::parse_type(const NodeDef& nodeDef, DataType& data_type) {
+    std::string name = nodeDef.name();
     if (nodeDef.attr().count("dtype")) {
         GetNodeAttr(nodeDef, "dtype", &data_type);
     } else if (nodeDef.attr().count("T")) {
@@ -156,8 +212,8 @@ rtg::shape Converter::parse_type(const Node * node, DataType& data_type) {
         const TensorShape& tensor_shape = raw_val.tensor_shape();
         for (int64 i = 0, e = tensor_shape.dims(); i < e; i++)
             dims.push_back(tensor_shape.dim_size(i));    
-    } else {
-        CHECK(node->type_string() == "_Arg") << "unknown shape";
+    } else if (inputs != nullptr) {
+        // CHECK(node->type_string() == "_Arg") << "unknown shape";
         CHECK(nodeDef.attr().count("index")) << "unknown argument index";
         int index;
         GetNodeAttr(nodeDef, "index", &index);
@@ -165,9 +221,39 @@ rtg::shape Converter::parse_type(const Node * node, DataType& data_type) {
         const TensorShape& tensor_shape = tensor.shape();
         for (int64 i = 0, e = tensor_shape.dims(); i < e; i++)
             dims.push_back(tensor_shape.dim_size(i));
+    } else {
+        CHECK(false) << "unknown shape";
     }
     
     return {shape_type, dims};
+}
+
+Status RTGToString(Converter& convert)
+{
+    rtg::program* program = convert.program;
+    unsigned cnt = 0;
+    for (auto& ins : program->instructions) {
+        cnt++;
+    }
+    GraphDef graph_def;
+    graph_def.Clear();
+    graph_def.mutable_node()->Reserve(cnt);
+    
+    for (auto& ins : program->instructions) {
+        string name = ins.op.name();
+        rtg::shape shape = ins.result;
+        NodeDef* def = graph_def.add_node();
+        def->set_name(name);
+        if (convert.isParameter(ins)) {
+            def->set_op("ArgOp");
+        }
+        auto& attr_map = *def->mutable_attr();
+        attr_map["dtype"].set_type();
+        TensorShapeProto proto;
+        convert.get_shape_proto(shape, &proto);
+        *attr_map["shape"].mutable_shape() = proto;
+    }
+    return Status::OK();    
 }
 
 Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT_MAP * inputs) {
@@ -175,17 +261,21 @@ Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT
     if (!program)
         return errors::Internal("Fail to create RTG program");
 
-    Converter convert(program, inputs);
+    Converter fwd_convert(program, inputs);
     for (const Edge* edge : cluster.input_edges) {
         if (edge->IsControlEdge())
             continue;
-        convert.add_parameter(edge->src());
+        fwd_convert.add_parameter(edge->src()->def());
     }
 
     for (Node* node : cluster.nodes) {
-        convert.add_instruction(node);
+        fwd_convert.add_instruction(node);
     }
     program->print();
+    // call program->compile()
+    Converter bwd_convert(program, nullptr);
+    TF_RETURN_IF_ERROR(RTGToString(bwd_convert));
+
     return Status::OK();    
 }
 
