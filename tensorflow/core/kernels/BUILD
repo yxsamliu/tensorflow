@@ -34,6 +34,7 @@ load(
     "tf_mkl_kernel_library",
     "cc_header_only_library",
     "if_not_windows",
+    "tf_rocm_kernel_library",
 )
 load("@local_config_sycl//sycl:build_defs.bzl", "if_sycl")
 load("//tensorflow:tensorflow.bzl", "tf_gpu_cc_test")
@@ -5640,7 +5641,7 @@ tf_kernel_library(
     ],
 )
 
-tf_kernel_library(
+tf_rocm_kernel_library(
     name = "rtg_launch_op",
     srcs = ["rtg_launch_op.cc"],
     hdrs = ["rtg_launch_op.h"],
