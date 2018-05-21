@@ -5640,6 +5640,24 @@ tf_kernel_library(
     ],
 )
 
+tf_kernel_library(
+    name = "rtg_launch_op",
+    srcs = ["rtg_launch_op.cc"],
+    hdrs = ["rtg_launch_op.h"],
+    copts= ["-g", "-O0"],
+    deps = [
+        "//tensorflow/core:core_cpu",
+        "//tensorflow/core:core_cpu_internal",
+        "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:lib_internal",
+        "//tensorflow/core:nn_ops_op_lib",        
+        "//tensorflow/core:stream_executor_no_cuda",
+    ],
+    alwayslink = 1,
+)
+
+
 # -----------------------------------------------------------------------------
 # Google-internal targets.  These must be at the end for syncrepo.
 

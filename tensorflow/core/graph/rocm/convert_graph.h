@@ -63,7 +63,6 @@ struct Converter {
     void add_instruction(const Node*);
     void add_parameter(const NodeDef&);
     DataType get_type(const rtg::shape&);
-    void get_shape_proto(const rtg::shape&, TensorShapeProto*);
     rtg::shape parse_type(const NodeDef&, DataType&);
     std::unordered_map<string, OpConverter> op_registry_;
     void Init() {

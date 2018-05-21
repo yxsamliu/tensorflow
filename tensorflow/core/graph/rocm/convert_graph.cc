@@ -171,15 +171,6 @@ DataType Converter::get_type(const rtg::shape& shape)
     }
 }
 
-void Converter::get_shape_proto(const rtg::shape& shape, TensorShapeProto * proto)
-{
-    proto->Clear();
-    const std::vector<std::size_t>& lens = shape.lens();
-    for (auto size : lens) {
-        proto->add_dim()->set_size(size);
-    }
-}
-    
 rtg::shape Converter::parse_type(const NodeDef& nodeDef, DataType& data_type) {
     std::string name = nodeDef.name();
     if (nodeDef.attr().count("dtype")) {
@@ -238,6 +229,7 @@ Status RTGToString(Converter& convert)
     GraphDef graph_def;
     graph_def.Clear();
     graph_def.mutable_node()->Reserve(cnt);
+    string serialized;
     
     for (auto& ins : program->instructions) {
         string name = ins.op.name();
@@ -247,11 +239,26 @@ Status RTGToString(Converter& convert)
         if (convert.isParameter(ins)) {
             def->set_op("ArgOp");
         }
+        
         auto& attr_map = *def->mutable_attr();
-        attr_map["dtype"].set_type();
-        TensorShapeProto proto;
-        convert.get_shape_proto(shape, &proto);
-        *attr_map["shape"].mutable_shape() = proto;
+        DataType type = convert.get_type(shape);
+        attr_map["dtype"].set_type(type);
+
+        const std::vector<std::size_t>& lens = shape.lens();
+        int size = lens.size();
+        TensorShape tensor_shape;
+        for (int i = 0; i < size; i++)
+            tensor_shape.AddDim(lens[i]);
+        AttrValue value;
+        SetAttrValue(tensor_shape, &value);
+        attr_map["shape"] = value;
+        
+        const TensorShapeProto& shape_proto = def->attr().at("shape").shape();
+        for (const auto& dim_proto : shape_proto.dim()) {
+            size = dim_proto.size();
+        }
+
+        protobuf::TextFormat::PrintToString(graph_def, &serialized);
     }
     return Status::OK();    
 }

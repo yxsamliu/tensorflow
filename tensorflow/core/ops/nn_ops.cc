@@ -3069,4 +3069,14 @@ expected to invoke these operators.
 )doc");
 #endif  // INTEL_MKL
 
+#ifdef TENSORFLOW_USE_ROCM
+REGISTER_OP("RTGLaunch")
+    .Attr("InT: list({float32})")
+    .Attr("OutT: list({float32})")
+    .Input("in_tensor: InT")
+    .Output("out_tensor: OutT")
+    .Attr("function: func")
+    .Doc("RTG Launch Op. For use by the AMD RTG only.");    
+#endif // TENSORFLOW_USE_ROCM
+
 }  // namespace tensorflow

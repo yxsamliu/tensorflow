@@ -16,7 +16,6 @@ limitations under the License.
 #ifdef TENSORFLOW_USE_ROCM
 
 #include "tensorflow/core/lib/strings/strcat.h"
-#include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/mutex.h"
 #include "dump_graph.h"
 

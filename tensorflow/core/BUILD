@@ -771,6 +771,8 @@ cc_library(
         "//tensorflow/core/kernels:mkl_relu_op",
         "//tensorflow/core/kernels:mkl_reshape_op",
         "//tensorflow/core/kernels:mkl_tfconv_op",
+    ]) + if_rocm([
+        "//tensorflow/core/kernels:rtg_launch_op",
     ]),
 )
 
@@ -1740,7 +1742,7 @@ cc_library(
              "graph/rocm/convert_graph.h",
              "graph/rocm/dump_graph.h",
              ]),
-        copts = tf_copts() + ["-g", "-Og", ] + ["-std=c++14"]
+        copts = tf_copts() + ["-g", "-O0", ] + ["-std=c++14"]
                 + ["-fexceptions"],
         linkopts = if_rocm(["-lrtg"]),
         deps = [
