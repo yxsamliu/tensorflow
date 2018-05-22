@@ -106,7 +106,10 @@ BUILD_TAG="${BUILD_TAG:-tf_ci}"
 # And clear them if we are not building for GPU.
 if [[ "${CONTAINER_TYPE}" != "gpu" ]] && [[ "${CONTAINER_TYPE}" != "gpu_clang" ]]; then
   GPU_EXTRA_PARAMS=""
-elif [[ "${CONTAINER_TYPE}" != "rocm" ]]; then
+fi
+if [[ "${CONTAINER_TYPE}" == "rocm" ]]; then
+  ROCM_EXTRA_PARAMS="--device=/dev/kfd --device=/dev/dri --group-add video"
+else
   ROCM_EXTRA_PARAMS=""
 fi
 
