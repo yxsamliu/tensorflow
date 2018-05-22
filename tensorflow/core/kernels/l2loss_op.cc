@@ -79,9 +79,10 @@ DECLARE_GPU_SPEC(Eigen::half);
       Name("L2Loss").Device(DEVICE_GPU).TypeConstraint<T>("T"), \
       L2LossOp<GPUDevice, T>);
 
-REGISTER_GPU_KERNEL(float);
-REGISTER_GPU_KERNEL(double);
-REGISTER_GPU_KERNEL(Eigen::half);
+// Comment out due to poor mGPU performance.
+//REGISTER_GPU_KERNEL(float);
+//REGISTER_GPU_KERNEL(double);
+//REGISTER_GPU_KERNEL(Eigen::half);
 #undef REGISTER_GPU_KERNEL
 
 #endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
