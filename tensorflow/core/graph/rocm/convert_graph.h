@@ -58,17 +58,22 @@ struct Converter {
     explicit Converter(rtg::program* p, T_INPUT_MAP* map) {
         Init(); program = p; inputs = map;
     }
+    bool isConstant(const rtg::instruction&);
     bool isParameter(const rtg::instruction&);
     bool isRegistered(const Node*);
     void add_instruction(const Node*);
     void add_parameter(const NodeDef&);
-    DataType get_type(const rtg::shape&);
-    rtg::shape parse_type(const NodeDef&, DataType&);
+    void getNodeType(const NodeDef&, DataType*);
+    rtg::shape getNodeShape(const NodeDef&, DataType* p_dtype = nullptr);
+    rtg::shape::type_t getShapeType(const DataType&);
+    DataType getType(const rtg::shape::type_t&);
+    void getTensorShape(const rtg::shape&, TensorShape&);
     std::unordered_map<string, OpConverter> op_registry_;
     void Init() {
         register_op_converters();
     }
     void register_op_converters();
+
     bool starts_with(const string& value, const string& prefix);
     std::unordered_map<std::string, rtg::instruction*> instructions;
     rtg::program* program;
@@ -85,7 +90,9 @@ Status AddRelu(Converter&, const NodeDef&, const T_RTG_INST_V&);
 Status AddScale(Converter&, const NodeDef&, const T_RTG_INST_V&);
 Status ConvertGraphToRTG(std::unique_ptr<Graph>*, T_INPUT_MAP*);
 Status ConvertSubGraphToRTG(std::unique_ptr<Graph>*, Cluster&, T_INPUT_MAP*);
-Status RTGToString(Converter&);
+Status BuildLaunchNode(std::unique_ptr<Graph>*, Cluster&,Converter&, string&);
+void SetParamAttr(rtg::shape, NameAttrList&, Converter&);
+void SetConstAttr(rtg::shape, NameAttrList&, Converter&); 
 
 } // namspace convert
 } // namespace rtglib

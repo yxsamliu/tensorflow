@@ -112,7 +112,7 @@ RTGLaunchOp::~RTGLaunchOp() {
   VLOG(1) << "RTGLaunchOp destroyed";
 }
 
-REGISTER_KERNEL_BUILDER(Name("RTGLaunch").Device(DEVICE_GPU), RTGLaunchOp);
+REGISTER_KERNEL_BUILDER(Name("RTGLaunchOp").Device(DEVICE_GPU), RTGLaunchOp);
 
 }  // namespace tensorflow
 

@@ -17,6 +17,9 @@ limitations under the License.
 
 
 #include "tensorflow/core/graph/algorithm.h"
+#include "tensorflow/core/framework/node_def.pb.h"
+#include "tensorflow/core/framework/node_def_builder.h"
+
 #include "convert_graph.h"
 #include "dump_graph.h"
 #include "rocm/include/rtg/operators.hpp"
@@ -71,7 +74,8 @@ Status AddConst(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inpu
     const auto& tensor = nodeDef.attr().at("value").tensor();
     auto& content = tensor.tensor_content();
     DataType dataType;
-    rtg::shape shape = ctx.parse_type(nodeDef, dataType);
+    ctx.getNodeType(nodeDef, &dataType);
+    rtg::shape shape = ctx.getNodeShape(nodeDef, &dataType);
     rtg::literal li;
     switch (dataType) {
     case DT_FLOAT:{
@@ -129,14 +133,19 @@ bool Converter::isParameter(const rtg::instruction& ins)
     string name = ins.op.name();
     return starts_with(name, "@param");
 }
+
+bool Converter::isConstant(const rtg::instruction& ins)
+{
+    string name = ins.op.name();
+    return starts_with(name, "@literal");
+}
     
 bool Converter::isRegistered(const Node * node) {
     return op_registry_.count(node->type_string());
 }
 
 void Converter::add_parameter(const NodeDef& nodeDef)  {
-    DataType dataType;
-    const rtg::shape shape = parse_type(nodeDef, dataType);
+    const rtg::shape shape = getNodeShape(nodeDef);
     const string& name = nodeDef.name();
     instructions[name] = program->add_parameter(name, shape);
 }
@@ -155,9 +164,8 @@ void Converter::add_instruction(const Node* node)  {
     CHECK(s == Status::OK()) << "fail to add instruction";
 }
 
-DataType Converter::get_type(const rtg::shape& shape)
+DataType Converter::getType(const rtg::shape::type_t& shape_type)
 {
-    rtg::shape::type_t shape_type = shape.type();
     switch (shape_type) {
     case rtg::shape::float_type: return DT_FLOAT; break;
     case rtg::shape::double_type: return DT_DOUBLE; break;
@@ -171,30 +179,42 @@ DataType Converter::get_type(const rtg::shape& shape)
     }
 }
 
-rtg::shape Converter::parse_type(const NodeDef& nodeDef, DataType& data_type) {
-    std::string name = nodeDef.name();
+void Converter::getNodeType(const NodeDef& nodeDef, DataType* data_type)
+{
     if (nodeDef.attr().count("dtype")) {
-        GetNodeAttr(nodeDef, "dtype", &data_type);
+        GetNodeAttr(nodeDef, "dtype", data_type);
     } else if (nodeDef.attr().count("T")) {
-        GetNodeAttr(nodeDef, "T", &data_type);
+        GetNodeAttr(nodeDef, "T", data_type);
     } else {
         CHECK(false) << "data type not found";
     }
-    rtg::shape::type_t shape_type;
+}
+
+rtg::shape::type_t Converter::getShapeType(const DataType& data_type)
+{
     switch (data_type) {
-    case DT_FLOAT: shape_type = rtg::shape::float_type; break;
-    case DT_DOUBLE: shape_type = rtg::shape::double_type; break;
-    case DT_INT64: shape_type = rtg::shape::int64_type; break;
-    // case DT_UINT64: shape_type = rtg::shape::uint64_type; break;
-    case DT_INT32: shape_type = rtg::shape::int32_type; break;
-    //    case DT_UINT32: shape_type = rtg::shape::uint32_type; break;
-    case DT_INT16: shape_type = rtg::shape::int16_type; break;
-    case DT_UINT16: shape_type = rtg::shape::uint16_type; break;
-    case DT_INT8: shape_type = rtg::shape::int8_type; break;
+    case DT_FLOAT: return rtg::shape::float_type; break;
+    case DT_DOUBLE: return rtg::shape::double_type; break;
+    case DT_INT64: return rtg::shape::int64_type; break;
+    // case DT_UINT64: return rtg::shape::uint64_type; break;
+    case DT_INT32: return rtg::shape::int32_type; break;
+    //    case DT_UINT32: return rtg::shape::uint32_type; break;
+    case DT_INT16: return rtg::shape::int16_type; break;
+    case DT_UINT16: return rtg::shape::uint16_type; break;
+    case DT_INT8: return rtg::shape::int8_type; break;
     default:
         CHECK(false) << "unmatched RTG data type";
     }
-    
+}
+
+rtg::shape Converter::getNodeShape(const NodeDef& nodeDef, DataType *p_dtype) {
+    std::string name = nodeDef.name();
+    DataType data_type;
+    if (p_dtype == nullptr)
+        getNodeType(nodeDef, &data_type);
+    else
+        data_type = *p_dtype;
+    rtg::shape::type_t shape_type = getShapeType(data_type);
     std::vector<std::size_t> dims;
     if (nodeDef.attr().count("value")) {
         const TensorProto& raw_val = nodeDef.attr().at("value").tensor();
@@ -219,9 +239,97 @@ rtg::shape Converter::parse_type(const NodeDef& nodeDef, DataType& data_type) {
     return {shape_type, dims};
 }
 
-Status RTGToString(Converter& convert)
+void Converter::getTensorShape(const rtg::shape& shape, TensorShape& tensor_shape)
+{
+    const std::vector<std::size_t>& lens = shape.lens();
+    int size = lens.size();
+    for (int i = 0; i < size; i++)
+        tensor_shape.AddDim(lens[i]);
+}
+
+void SetParamAttr(rtg::shape shape, NameAttrList& attrs, Converter& convert) {
+    DataType type = convert.getType(shape.type());
+    auto attr_map = attrs.mutable_attr();
+    AttrValue t_value;
+    SetAttrValue(type, &t_value);
+    (*attr_map)["dtype"] = t_value;
+    TensorShape tensor_shape;
+    convert.getTensorShape(shape, tensor_shape);
+    AttrValue s_value;
+    SetAttrValue(tensor_shape, &s_value);
+    (*attr_map)["shape"] = s_value;
+}
+
+void SetConstAttr(rtg::shape shape, NameAttrList& attrs, Converter& convert) {
+    DataType type = convert.getType(shape.type());
+    auto attr_map = attrs.mutable_attr();
+    TensorShape tensor_shape;
+    convert.getTensorShape(shape, tensor_shape);
+    Tensor tensor(type, tensor_shape);
+    TensorProto tensor_proto;
+    tensor.AsProtoTensorContent(&tensor_proto);
+    AttrValue value;
+    SetAttrValue(tensor_proto, &value);
+    (*attr_map)["value"] = value;
+}
+
+ Status BuildLaunchNode(std::unique_ptr<Graph>* g, Cluster& cluster, Converter& convert, string& name)
 {
     rtg::program* program = convert.program;
+    NodeDefBuilder op_builder(name, "RTGLaunchOp");
+    std::vector<NodeDefBuilder::NodeOut> income_edges;
+    for (const Edge* edge : cluster.input_edges) {
+        if (edge->IsControlEdge())
+            continue;
+        Node * src = edge->src();
+        DataType data_type;
+        convert.getNodeType(src->def(), &data_type);
+        auto income_edge = NodeDefBuilder::NodeOut(src->name(), 
+            edge->src_output(), data_type);
+        income_edges.push_back(income_edge);
+    }
+    gtl::ArraySlice<tensorflow::NodeDefBuilder::NodeOut> input_list(income_edges);
+    op_builder.Input(input_list);
+    unsigned num_values = 0;
+    for (auto& ins : program->instructions)
+        num_values++;
+    NameAttrList* func = new NameAttrList[num_values];
+    int cnt = 0;
+    for (auto& ins : program->instructions) {
+        rtg::shape shape = ins.result;
+        string name = ins.op.name();
+        NameAttrList& attrs = func[cnt];
+        attrs.set_name(name);
+        if (convert.isParameter(ins)) {
+            SetParamAttr(shape, attrs, convert);
+        } else if (convert.isConstant(ins)) {
+            SetConstAttr(shape, attrs, convert);
+        }
+        cnt++;
+    }
+    
+#if 0        
+    Graph& graph = **g;
+    NodeDef rtg_def;
+    Status status;
+    Node * rtg_node = graph.AddNode(rtg_def, &status);
+    CHECK(status.ok()) << "fail to add graph node";
+    auto& attr_map = rtg_def.mutable_attr();
+    for (auto& ins : program->instructions) {
+        rtg::shape shape = ins.result;
+        DataType type = convert.getType(shape.type());
+        attr_map["dtype"].set_type(type);
+        if (convert.isParameter(ins)) {
+            const std::vector<std::size_t>& lens = shape.lens();
+            int size = lens.size();
+            TensorShape tensor_shape;
+            for (int i = 0; i < size; i++)
+                tensor_shape.AddDim(lens[i]);
+            AttrValue value;
+            SetAttrValue(tensor_shape, &value);
+        }
+    }
+    
     unsigned cnt = 0;
     for (auto& ins : program->instructions) {
         cnt++;
@@ -241,7 +349,7 @@ Status RTGToString(Converter& convert)
         }
         
         auto& attr_map = *def->mutable_attr();
-        DataType type = convert.get_type(shape);
+        DataType type = convert.getType(shape.type());
         attr_map["dtype"].set_type(type);
 
         const std::vector<std::size_t>& lens = shape.lens();
@@ -260,6 +368,7 @@ Status RTGToString(Converter& convert)
 
         protobuf::TextFormat::PrintToString(graph_def, &serialized);
     }
+#endif    
     return Status::OK();    
 }
 
@@ -275,13 +384,15 @@ Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT
         fwd_convert.add_parameter(edge->src()->def());
     }
 
+    string cluster_name;
     for (Node* node : cluster.nodes) {
         fwd_convert.add_instruction(node);
+        cluster_name += node->name();
     }
     program->print();
     // call program->compile()
     Converter bwd_convert(program, nullptr);
-    TF_RETURN_IF_ERROR(RTGToString(bwd_convert));
+    TF_RETURN_IF_ERROR(BuildLaunchNode(g, cluster, bwd_convert, cluster_name));
 
     return Status::OK();    
 }
@@ -425,4 +536,3 @@ Status ConvertGraphToRTG(std::unique_ptr<Graph>* g, T_INPUT_MAP* inputs) {
 } // namespace tensorflow
 
 #endif // TENSORFLOW_USE_ROCM
-

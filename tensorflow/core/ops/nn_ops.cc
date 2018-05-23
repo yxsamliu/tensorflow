@@ -3070,7 +3070,7 @@ expected to invoke these operators.
 #endif  // INTEL_MKL
 
 #ifdef TENSORFLOW_USE_ROCM
-REGISTER_OP("RTGLaunch")
+REGISTER_OP("RTGLaunchOp")
     .Attr("InT: list({float32})")
     .Attr("OutT: list({float32})")
     .Input("in_tensor: InT")
