@@ -129,6 +129,9 @@ elif [[ ${CONTAINER_TYPE} == "gpu" ]]; then
   bazel build ${BAZEL_FLAGS} ${PIP_BUILD_TARGET} || \
       die "Build failed."
   GPU_FLAG="--gpu"
+elif [[ ${CONTAINER_TYPE} == "rocm" ]]; then
+  bazel build --config=opt --config=rocm ${BAZEL_FLAGS} ${PIP_BUILD_TARGET} || \
+      die "Build failed."
 else
   die "Unrecognized container type: \"${CONTAINER_TYPE}\""
 fi
