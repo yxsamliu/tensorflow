@@ -408,6 +408,11 @@ class Graph {
   // REQUIRES: The edge must exist.
   void RemoveEdge(const Edge* edge);
 
+  // Updates the input to a node.  The existing edge to `dst` is removed and an
+  // edge from `new_src` to `dst` is created. The NodeDef associated with `dst`
+  // is also updated.
+  Status UpdateEdge(Node* new_src, int new_src_index, Node* dst, int dst_index);
+
   // Adds the function and gradient definitions in `fdef_lib` to this graph's op
   // registry. Ignores duplicate functions, and returns a bad status if an
   // imported function differs from an existing function or op with the same
@@ -506,7 +511,16 @@ class Graph {
   // TODO(josh11b): uint64 hash() const;
 
  private:
-  bool IsValidNode(Node* node) const;
+  bool IsValidNode(const Node* node) const;
+
+  // Returns OK if IsValidNode(`node`) and `idx` is less than
+  // node->num_outputs()
+  Status IsValidOutputTensor(const Node* node, int idx) const;
+
+  // Returns OK if IsValidNode(`node`) and `idx` is less than
+  // node->num_inputs()
+  Status IsValidInputTensor(const Node* node, int idx) const;
+
   // If cost_node is non-null, then cost accounting (in CostModel)
   // will be associated with that node rather than the new one being
   // created.
@@ -569,6 +583,11 @@ class Graph {
 
   // Maps unique device names to indices within device_names_[i].
   std::unordered_map<string, int> device_names_map_;
+
+  // Searches through edges_ for the Edge whose destination node and index
+  // matches dst. An edge with destination `dst` must exist in the graph.
+  const Edge* FindEdge(const Node* dst, int index);
+
 
   TF_DISALLOW_COPY_AND_ASSIGN(Graph);
 };

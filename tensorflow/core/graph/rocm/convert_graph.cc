@@ -343,10 +343,20 @@ void SetConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& c
         Node* src = edge->src();
         Node* dst = edge->dst();
         int dest_port = edge->dst_input();
-        DataType data_type;
+        DataType data_type = dst->input_type(dest_port);
         auto income_edge = NodeDefBuilder::NodeOut(src->name(), 
-            edge->src_output(), dst->input_type(dest_port));
+                                                  edge->src_output(), data_type);
         income_edges.emplace_back(income_edge);
+    }
+
+    std::vector<DataType> out_types;
+    for (const Edge* edge : cluster.output_edges) {
+        if (edge->IsControlEdge())
+            continue;
+        Node* dst = edge->dst();
+        int dest_port = edge->dst_input();
+        DataType data_type = dst->input_type(dest_port);
+        out_types.push_back(data_type);
     }
 
     gtl::ArraySlice<tensorflow::NodeDefBuilder::NodeOut> input_list(income_edges);
@@ -378,12 +388,29 @@ void SetConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& c
     (*func.mutable_attr())["func"] = value;
     NodeDef node_def;
     Status status =  op_builder.Attr("function", func)
+                        .Attr("OutT", out_types)
                         .Finalize(&node_def);
     CHECK(status.ok()) << "fail to add RTGLaunchOp";
     Graph& graph = **g;
     auto rtg_node = graph.AddNode(node_def, &status);
     TF_RETURN_IF_ERROR(status);
-    
+    int ndx = 0;
+
+    for (const Edge* edge : cluster.output_edges) {
+        Node* dst = edge->dst();
+        int dest_port = edge->dst_input();
+        TF_RETURN_IF_ERROR(graph.UpdateEdge(rtg_node, ndx, dst, dest_port));
+        ndx++;
+    }
+
+    for (Node* node : cluster.nodes)
+        graph.RemoveNode(node);
+
+    for (const Edge* edge : rtg_node->in_edges()) {
+        Node * src = edge->src();
+        Node * dst = edge->dst();
+    }
+
 #if 0        
     const TensorShapeProto& shape_proto = def->attr().at("shape").shape();
     for (const auto& dim_proto : shape_proto.dim()) {
@@ -550,6 +577,7 @@ Status ConvertGraphToRTG(std::unique_ptr<Graph>* g, T_INPUT_MAP* inputs) {
         }
     }
 
+    RTGLIB::dump_graph::DumpGraphToFile("After convert graph to RTG", graph);
     return Status::OK();
 }
     
