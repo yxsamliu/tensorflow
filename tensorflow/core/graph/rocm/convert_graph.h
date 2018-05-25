@@ -58,7 +58,9 @@ struct Converter {
     explicit Converter(rtg::program* p, T_INPUT_MAP* map) {
         Init(); program = p; inputs = map;
     }
+    bool isActivation(const rtg::instruction&);
     bool isConstant(const rtg::instruction&);
+    bool isConvolution(const rtg::instruction&);
     bool isParameter(const rtg::instruction&);
     bool isRegistered(const Node*);
     void add_instruction(const Node*);
@@ -71,29 +73,39 @@ struct Converter {
     std::unordered_map<string, OpConverter> op_registry_;
     void Init() {
         register_op_converters();
+        instructions.clear();
+        rtgInsNames.clear();
+        rtgInsCnt.clear();
     }
     void register_op_converters();
 
     bool starts_with(const string& value, const string& prefix);
-    std::unordered_map<std::string, rtg::instruction*> instructions;
+    std::unordered_map<string, rtg::instruction*> instructions;
+    std::unordered_map<rtg::instruction*, string> rtgInsNames;
+    std::unordered_map<string, int> rtgInsCnt;
     rtg::program* program;
     T_INPUT_MAP* inputs;
+    static const string prefix;
 };
 
+const string Converter::prefix = "@";
+ 
 Status AddActivation(Converter&, const NodeDef&, const T_RTG_INST_V&);
 Status AddBiasAdd(Converter&, const NodeDef&, const T_RTG_INST_V&);
 Status AddConst(Converter&, const NodeDef&, const T_RTG_INST_V&);
 Status AddConv2D(Converter&, const NodeDef&, const T_RTG_INST_V&);
 Status AddIdentity(Converter&, const NodeDef&, const T_RTG_INST_V&);
 Status AddMaxPool(Converter&, const NodeDef&, const T_RTG_INST_V&);
-Status AddRelu(Converter&, const NodeDef&, const T_RTG_INST_V&);
 Status AddScale(Converter&, const NodeDef&, const T_RTG_INST_V&);
 Status ConvertGraphToRTG(std::unique_ptr<Graph>*, T_INPUT_MAP*);
 Status ConvertSubGraphToRTG(std::unique_ptr<Graph>*, Cluster&, T_INPUT_MAP*);
 Status BuildLaunchNode(std::unique_ptr<Graph>*, Cluster&,Converter&, string&);
-void SetParamAttr(rtg::shape, NameAttrList&, Converter&);
-void SetConstAttr(rtg::shape, NameAttrList&, Converter&); 
-
+void SetInputAttr(rtg::instruction&, NameAttrList&, Converter&);
+void SetNameAttr(rtg::instruction&, NameAttrList&, Converter&); 
+void SetActivationAttr(rtg::instruction&, NameAttrList&, Converter&); 
+void SetConstAttr(rtg::instruction&, NameAttrList&, Converter&); 
+void SetConvolutionAttr(rtg::instruction&, NameAttrList&, Converter&);
+void SetParamAttr(rtg::instruction&, NameAttrList&, Converter&); 
 } // namspace convert
 } // namespace rtglib
 } // namespace tensorflow

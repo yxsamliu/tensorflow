@@ -55,11 +55,6 @@ Status AddConv2D(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inp
     return Status::OK();
 }
 
-Status AddRelu(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
-    CHECK(false);
-    return Status::OK();
-}
-
 Status AddMaxPool(Converter& ctx, const NodeDef& nodeDef, const T_RTG_INST_V& inputs) {
     CHECK(false);
     return Status::OK();
@@ -138,6 +133,18 @@ bool Converter::isConstant(const rtg::instruction& ins)
 {
     string name = ins.op.name();
     return starts_with(name, "@literal");
+}
+
+bool Converter::isConvolution(const rtg::instruction& ins)
+{
+    string name = ins.op.name();
+    return starts_with(name, "convolution");
+}
+
+bool Converter::isActivation(const rtg::instruction& ins)
+{
+    string name = ins.op.name();
+    return starts_with(name, "activation");
 }
     
 bool Converter::isRegistered(const Node * node) {
@@ -247,7 +254,49 @@ void Converter::getTensorShape(const rtg::shape& shape, TensorShape& tensor_shap
         tensor_shape.AddDim(lens[i]);
 }
 
-void SetParamAttr(rtg::shape shape, NameAttrList& attrs, Converter& convert) {
+void SetNameAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert)
+{
+    string name = ins.op.name();
+    int cnt = 0;
+    if (convert.rtgInsCnt.find(name) == convert.rtgInsCnt.end()) {
+        convert.rtgInsCnt[name] = 0;
+    } else {
+        cnt = (convert.rtgInsCnt[name])++;
+    }
+    string new_name = ins.op.name() + Converter::prefix + std::to_string(cnt);
+    attrs.set_name(new_name);
+    convert.rtgInsNames[&ins] = new_name;
+}
+    
+void SetInputAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert)
+{
+    auto attr_map = attrs.mutable_attr();
+    AttrValue value;
+    int32 arg_cnt = ins.arguments.size();
+    SetAttrValue(arg_cnt, &value);
+    (*attr_map)["num_inputs"] = value;
+    arg_cnt = 0;
+    for (auto iter = ins.arguments.begin(), end = ins.arguments.end(); iter != end; iter++) {
+        rtg::instruction* arg = *iter;
+        string name = convert.rtgInsNames[arg];
+        AttrValue value;
+        SetAttrValue(name, &value);
+        string input_name = "input" + std::to_string(arg_cnt);
+        arg_cnt++;
+        (*attr_map)[input_name] = value;
+    }    
+}    
+
+void SetActivationAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
+    SetNameAttr(ins, attrs, convert);
+    SetInputAttr(ins, attrs, convert);
+}
+    
+void SetParamAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
+    rtg::shape shape = ins.result;
+    string name = ins.op.name();
+    attrs.set_name(name);
+    convert.rtgInsNames[&ins] = name;
     DataType type = convert.getType(shape.type());
     auto attr_map = attrs.mutable_attr();
     AttrValue t_value;
@@ -260,17 +309,27 @@ void SetParamAttr(rtg::shape shape, NameAttrList& attrs, Converter& convert) {
     (*attr_map)["shape"] = s_value;
 }
 
-void SetConstAttr(rtg::shape shape, NameAttrList& attrs, Converter& convert) {
+void SetConstAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
+    SetNameAttr(ins, attrs, convert);
+    rtg::shape shape = ins.result;
     DataType type = convert.getType(shape.type());
     auto attr_map = attrs.mutable_attr();
     TensorShape tensor_shape;
     convert.getTensorShape(shape, tensor_shape);
     Tensor tensor(type, tensor_shape);
+    int size = tensor.tensor_data().size();
+    memcpy(const_cast<char*>(tensor.tensor_data().data()), ins.lit.data(), size);
     TensorProto tensor_proto;
     tensor.AsProtoTensorContent(&tensor_proto);
     AttrValue value;
     SetAttrValue(tensor_proto, &value);
     (*attr_map)["value"] = value;
+}
+
+void SetConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
+    SetNameAttr(ins, attrs, convert);
+    SetInputAttr(ins, attrs, convert);
+    // TODO: get stride, padding, dilation.embedded in name?
 }
 
  Status BuildLaunchNode(std::unique_ptr<Graph>* g, Cluster& cluster, Converter& convert, string& name)
@@ -281,93 +340,56 @@ void SetConstAttr(rtg::shape shape, NameAttrList& attrs, Converter& convert) {
     for (const Edge* edge : cluster.input_edges) {
         if (edge->IsControlEdge())
             continue;
-        Node * src = edge->src();
+        Node* src = edge->src();
+        Node* dst = edge->dst();
+        int dest_port = edge->dst_input();
         DataType data_type;
-        convert.getNodeType(src->def(), &data_type);
         auto income_edge = NodeDefBuilder::NodeOut(src->name(), 
-            edge->src_output(), data_type);
-        income_edges.push_back(income_edge);
+            edge->src_output(), dst->input_type(dest_port));
+        income_edges.emplace_back(income_edge);
     }
+
     gtl::ArraySlice<tensorflow::NodeDefBuilder::NodeOut> input_list(income_edges);
     op_builder.Input(input_list);
+
     unsigned num_values = 0;
-    for (auto& ins : program->instructions)
-        num_values++;
-    NameAttrList* func = new NameAttrList[num_values];
-    int cnt = 0;
+    AttrValue value;
+    value.mutable_list()->Clear();
     for (auto& ins : program->instructions) {
-        rtg::shape shape = ins.result;
-        string name = ins.op.name();
-        NameAttrList& attrs = func[cnt];
-        attrs.set_name(name);
+        num_values++;
+        NameAttrList& attrs = *(value.mutable_list()->add_func());
+        attrs.Clear();
         if (convert.isParameter(ins)) {
-            SetParamAttr(shape, attrs, convert);
+            SetParamAttr(ins, attrs, convert);
         } else if (convert.isConstant(ins)) {
-            SetConstAttr(shape, attrs, convert);
+            SetConstAttr(ins, attrs, convert);
+        } else if (convert.isConvolution(ins)) {
+            SetConvolutionAttr(ins, attrs, convert);
+        } else if (convert.isActivation(ins)) {
+            SetActivationAttr(ins, attrs, convert);
+        } else {
+            CHECK(false) << "Unknown RTG instruction";
         }
-        cnt++;
     }
+
+    NameAttrList func;
+    func.Clear();
+    func.set_name("function");
+    (*func.mutable_attr())["func"] = value;
+    NodeDef node_def;
+    Status status =  op_builder.Attr("function", func)
+                        .Finalize(&node_def);
+    CHECK(status.ok()) << "fail to add RTGLaunchOp";
+    Graph& graph = **g;
+    auto rtg_node = graph.AddNode(node_def, &status);
+    TF_RETURN_IF_ERROR(status);
     
 #if 0        
-    Graph& graph = **g;
-    NodeDef rtg_def;
-    Status status;
-    Node * rtg_node = graph.AddNode(rtg_def, &status);
-    CHECK(status.ok()) << "fail to add graph node";
-    auto& attr_map = rtg_def.mutable_attr();
-    for (auto& ins : program->instructions) {
-        rtg::shape shape = ins.result;
-        DataType type = convert.getType(shape.type());
-        attr_map["dtype"].set_type(type);
-        if (convert.isParameter(ins)) {
-            const std::vector<std::size_t>& lens = shape.lens();
-            int size = lens.size();
-            TensorShape tensor_shape;
-            for (int i = 0; i < size; i++)
-                tensor_shape.AddDim(lens[i]);
-            AttrValue value;
-            SetAttrValue(tensor_shape, &value);
-        }
+    const TensorShapeProto& shape_proto = def->attr().at("shape").shape();
+    for (const auto& dim_proto : shape_proto.dim()) {
+        size = dim_proto.size();
     }
-    
-    unsigned cnt = 0;
-    for (auto& ins : program->instructions) {
-        cnt++;
-    }
-    GraphDef graph_def;
-    graph_def.Clear();
-    graph_def.mutable_node()->Reserve(cnt);
-    string serialized;
-    
-    for (auto& ins : program->instructions) {
-        string name = ins.op.name();
-        rtg::shape shape = ins.result;
-        NodeDef* def = graph_def.add_node();
-        def->set_name(name);
-        if (convert.isParameter(ins)) {
-            def->set_op("ArgOp");
-        }
-        
-        auto& attr_map = *def->mutable_attr();
-        DataType type = convert.getType(shape.type());
-        attr_map["dtype"].set_type(type);
-
-        const std::vector<std::size_t>& lens = shape.lens();
-        int size = lens.size();
-        TensorShape tensor_shape;
-        for (int i = 0; i < size; i++)
-            tensor_shape.AddDim(lens[i]);
-        AttrValue value;
-        SetAttrValue(tensor_shape, &value);
-        attr_map["shape"] = value;
-        
-        const TensorShapeProto& shape_proto = def->attr().at("shape").shape();
-        for (const auto& dim_proto : shape_proto.dim()) {
-            size = dim_proto.size();
-        }
-
-        protobuf::TextFormat::PrintToString(graph_def, &serialized);
-    }
+    protobuf::TextFormat::PrintToString(graph_def, &serialized);
 #endif    
     return Status::OK();    
 }
