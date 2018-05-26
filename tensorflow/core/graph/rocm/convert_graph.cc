@@ -394,21 +394,52 @@ void SetConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& c
     Graph& graph = **g;
     auto rtg_node = graph.AddNode(node_def, &status);
     TF_RETURN_IF_ERROR(status);
+
+    // Edge info.
+    typedef struct {
+        Node * src;
+        int src_output;
+        bool is_control;
+    } edge_desc;
+    std::vector<edge_desc> input_edges;
+
+    // Cache input edge info.
+    for (const Edge* edge : cluster.input_edges)
+        input_edges.push_back(edge_desc{edge->src(), edge->src_output(), edge->IsControlEdge()});
+    // Construct output edges.
     int ndx = 0;
-
     for (const Edge* edge : cluster.output_edges) {
-        Node* dst = edge->dst();
-        int dest_port = edge->dst_input();
-        TF_RETURN_IF_ERROR(graph.UpdateEdge(rtg_node, ndx, dst, dest_port));
-        ndx++;
+        if (!edge->IsControlEdge()) {
+            Node* dst = edge->dst();            
+            int dest_port = edge->dst_input();    
+            TF_RETURN_IF_ERROR(graph.UpdateEdge(rtg_node, ndx, dst, dest_port));
+            ndx++;
+        }
     }
-
+    // Add control edges at the end.
+    for (const Edge* edge : cluster.output_edges) {
+        if (edge->IsControlEdge()) {
+            graph.RemoveEdge(edge);
+            graph.AddControlEdge(rtg_node, edge->dst());
+        }
+    }
+    
+    // Remove nodes in the subgraph and their edges.
     for (Node* node : cluster.nodes)
         graph.RemoveNode(node);
-
-    for (const Edge* edge : rtg_node->in_edges()) {
-        Node * src = edge->src();
-        Node * dst = edge->dst();
+    // Construct input edges.
+    ndx = 0;
+    CHECK(rtg_node->in_edges().empty()) << "Unexpected input edges";
+    for (auto iter = input_edges.begin(), end = input_edges.end(); iter != end; iter++) {
+        if (!(*iter).is_control) {
+            graph.AddEdge((*iter).src, (*iter).src_output, rtg_node, ndx);
+            ndx++;
+        }
+    }
+    // Add control edges at the end.
+    for (auto iter = input_edges.begin(), end = input_edges.end(); iter != end; iter++) {
+        if ((*iter).is_control)
+            graph.AddControlEdge((*iter).src, rtg_node);
     }
 
 #if 0        
