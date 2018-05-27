@@ -44,6 +44,7 @@ RUN apt-get update --allow-insecure-repositories && DEBIAN_FRONTEND=noninteracti
   libboost-filesystem-dev \
   rpm \
   libnuma-dev \
+  virtualenv \
   wget && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/*
