@@ -194,7 +194,10 @@ def _get_tensordot_tests(dtype_, rank_a_, rank_b_, num_dims_, dynamic_shape_):
 
 
 if __name__ == "__main__":
-  for dtype in np.float16, np.float32, np.float64, np.complex64, np.complex128:
+  dtypes_list = [np.float16, np.float32, np.float64]
+  if not test_lib.is_built_with_rocm() :
+    dtypes_list += [np.complex64, np.complex128]
+  for dtype in dtypes_list :
     for rank_a in 1, 2, 4, 5:
       for rank_b in 1, 2, 4, 5:
         for num_dims in range(0, min(rank_a, rank_b) + 1):
