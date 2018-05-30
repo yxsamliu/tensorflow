@@ -17,11 +17,9 @@ limitations under the License.
 #ifndef TENSORFLOW_RTGLIB_CONVERT_
 #define TENSORFLOW_RTGLIB_CONVERT_
 
-#include "tensorflow/core/lib/core/status.h"
-#include "tensorflow/core/graph/graph.h"
-#include "tensorflow/core/framework/node_def.pb.h"
-#include "tensorflow/core/framework/tensor_shape.pb.h"
-#include "tensorflow/core/framework/node_def_builder.h"
+#ifndef TENSORFLOW_RTGLIB_COMMON_HEADER_
+#include "common_headers.h"
+#endif  // TENSORFLOW_RTGLIB_COMMON_HEADER_
 
 #include "rocm/include/rtg/program.hpp"
 
@@ -62,6 +60,7 @@ struct Converter {
     bool isConstant(const rtg::instruction&);
     bool isConvolution(const rtg::instruction&);
     bool isParameter(const rtg::instruction&);
+    bool isCandidate(const Node*);
     bool isRegistered(const Node*);
     void add_instruction(const Node*);
     void add_parameter(const NodeDef&);
@@ -78,7 +77,6 @@ struct Converter {
         rtgInsCnt.clear();
     }
     void register_op_converters();
-
     bool starts_with(const string& value, const string& prefix);
     std::unordered_map<string, rtg::instruction*> instructions;
     std::unordered_map<rtg::instruction*, string> rtgInsNames;
@@ -86,6 +84,7 @@ struct Converter {
     rtg::program* program;
     T_INPUT_MAP* inputs;
     static const string prefix;
+    string device;
 };
 
 const string Converter::prefix = "@";

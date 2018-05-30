@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/platform/macros.h"
 #include "tensorflow/core/util/stream_executor_util.h"
+#include "tensorflow/core/graph/rocm/attr_to_rtg.h"
 
 namespace tensorflow {
 
@@ -35,7 +36,6 @@ class RTGLaunchOp : public OpKernel {
   ~RTGLaunchOp() override;
 
   void Compute(OpKernelContext* ctx) override;
-
  private:
   NameAttrList function_;
 

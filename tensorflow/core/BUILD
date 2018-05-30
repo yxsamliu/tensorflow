@@ -1737,10 +1737,13 @@ cc_library(
              "graph/rocm/convert_graph.cc",
              "graph/rocm/dump_graph.cc",
              "graph/rocm/rocm_pass.cc",
+             "graph/rocm/attr_to_rtg.cc",             
              ]),
         hdrs = CORE_CPU_BASE_HDRS + if_not_windows([
              "graph/rocm/convert_graph.h",
              "graph/rocm/dump_graph.h",
+             "graph/rocm/attr_to_rtg.h",
+             "graph/rocm/common_headers.h",
              ]),
         copts = tf_copts() + ["-g", "-O0", ] + ["-std=c++14"]
                 + ["-fexceptions"],

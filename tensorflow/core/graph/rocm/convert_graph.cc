@@ -15,11 +15,6 @@ limitations under the License.
 
 #ifdef TENSORFLOW_USE_ROCM
 
-
-#include "tensorflow/core/graph/algorithm.h"
-#include "tensorflow/core/framework/node_def.pb.h"
-#include "tensorflow/core/framework/node_def_builder.h"
-
 #include "convert_graph.h"
 #include "dump_graph.h"
 #include "rocm/include/rtg/operators.hpp"
@@ -149,6 +144,20 @@ bool Converter::isActivation(const rtg::instruction& ins)
     
 bool Converter::isRegistered(const Node * node) {
     return op_registry_.count(node->type_string());
+}
+
+bool Converter::isCandidate(const Node * node) {
+    if (!node->IsOp() || !isRegistered(node))
+        return false;
+    const char * const gpuDeviceSubStr = "gpu";
+    const NodeDef& nodeDef = node->def();
+    // If user has specified a non-GPU device.
+    if (!nodeDef.device().empty() && !StringPiece(nodeDef.device()).contains(gpuDeviceSubStr))
+        return false;
+    // If runtime has assigned a non-GPU device.
+    if (!node->assigned_device_name().empty() && !StringPiece(node->assigned_device_name()).contains(gpuDeviceSubStr))
+        return false;
+    return true;
 }
 
 void Converter::add_parameter(const NodeDef& nodeDef)  {
@@ -332,7 +341,7 @@ void SetConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& c
     // TODO: get stride, padding, dilation.embedded in name?
 }
 
- Status BuildLaunchNode(std::unique_ptr<Graph>* g, Cluster& cluster, Converter& convert, string& name)
+Status BuildLaunchNode(std::unique_ptr<Graph>* g, Cluster& cluster, Converter& convert, string& name)
 {
     rtg::program* program = convert.program;
     NodeDefBuilder op_builder(name, "RTGLaunchOp");
@@ -353,6 +362,8 @@ void SetConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& c
     for (const Edge* edge : cluster.output_edges) {
         if (edge->IsControlEdge())
             continue;
+        Node* src = edge->src();
+        CHECK(!src->IsConstant()) << "todo: constant is exit node";
         Node* dst = edge->dst();
         int dest_port = edge->dst_input();
         DataType data_type = dst->input_type(dest_port);
@@ -441,6 +452,7 @@ void SetConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& c
         if ((*iter).is_control)
             graph.AddControlEdge((*iter).src, rtg_node);
     }
+    rtg_node->set_assigned_device_name(convert.device);
 
 #if 0        
     const TensorShapeProto& shape_proto = def->attr().at("shape").shape();
@@ -465,13 +477,16 @@ Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT
     }
 
     string cluster_name;
+    string device;
     for (Node* node : cluster.nodes) {
         fwd_convert.add_instruction(node);
         cluster_name += node->name();
+        device = node->assigned_device_name();
     }
     program->print();
     // call program->compile()
     Converter bwd_convert(program, nullptr);
+    bwd_convert.device = device;
     TF_RETURN_IF_ERROR(BuildLaunchNode(g, cluster, bwd_convert, cluster_name));
 
     return Status::OK();    
@@ -500,7 +515,7 @@ Status ConvertGraphToRTG(std::unique_ptr<Graph>* g, T_INPUT_MAP* inputs) {
     for (Node* n : rpOrder) {
         int id = n->id();
         id2Order[id] = maxNodeNum++;
-        id2Candidate[id] = (n->IsOp() && convert.isRegistered(n)) ? true : false;
+        id2Candidate[id] = convert.isCandidate(n) ? true : false;
         id2Mask[id] = 0;
     }
 

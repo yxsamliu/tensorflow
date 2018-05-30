@@ -14,18 +14,13 @@ limitations under the License.
 ==============================================================================*/
 #ifdef TENSORFLOW_USE_ROCM
 #include "tensorflow/core/kernels/rtg_launch_op.h"
-
 #include "tensorflow/core/common_runtime/dma_helper.h"
 #include "tensorflow/core/common_runtime/function.h"
 #include "tensorflow/core/framework/allocator.h"
 #include "tensorflow/core/framework/node_def_util.h"
-#include "tensorflow/core/framework/op.h"
-#include "tensorflow/core/framework/op_kernel.h"
-#include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/stream_executor_no_cuda.h"
-#include "tensorflow/core/util/stream_executor_util.h"
 
 namespace gpu = perftools::gputools;
 
@@ -35,10 +30,22 @@ RTGLaunchOp::RTGLaunchOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
   const NameAttrList* func;
   OP_REQUIRES_OK(ctx, ctx->GetAttr("function", &func));
   function_ = *func;
+  auto attr_map = func->attr();
+  AttrValue value = attr_map.at("func");
+  int size = value.list().func_size();
+  for (int i = 0; i < size; ++i) {
+      const NameAttrList& func = value.list().func(i);
+      auto map = func.attr();
+      string name = func.name();
+      
+  }
+  
 }
 
 void RTGLaunchOp::Compute(OpKernelContext* ctx) {
   VLOG(1) << "RTGLaunchOp::Compute ";
+  void * program;
+  rtglib::convert::GetProgram(function_, &program);
   gpu::Stream* stream =
       ctx->op_device_context() ? ctx->op_device_context()->stream() : nullptr;
 
