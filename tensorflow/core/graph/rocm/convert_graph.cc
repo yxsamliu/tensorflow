@@ -110,6 +110,13 @@ void Converter::register_op_converters()  {
 #endif    
 }
 
+void Converter::register_attr_converters() {
+    attr_registry_["@param"] = SetParamAttr;
+    attr_registry_["@literal"] = SetConstAttr;
+    attr_registry_["convolution"] = SetConvolutionAttr;
+    attr_registry_["activation"] = SetActivationAttr;
+}
+
 bool Converter::starts_with(const string& value, const string& prefix)
 {
     if (prefix.size() <= value.size()) {
@@ -118,9 +125,18 @@ bool Converter::starts_with(const string& value, const string& prefix)
     return false;
 }
 
-bool Converter::isParameter(const rtg::instruction& ins)
+string Converter::lookup(const string name)
 {
-    string name = ins.op.name();
+    for (auto iter = attr_registry_.begin(); iter != attr_registry_.end(); ++iter) {
+        string rtg_name = iter->first;
+        if (starts_with(name, rtg_name))
+            return rtg_name;
+    }
+    return "";
+}
+    
+bool Converter::isParameter(const string name) 
+{
     return starts_with(name, "@param");
 }
 
@@ -380,7 +396,14 @@ Status BuildLaunchNode(std::unique_ptr<Graph>* g, Cluster& cluster, Converter& c
         num_values++;
         NameAttrList& attrs = *(value.mutable_list()->add_func());
         attrs.Clear();
-        if (convert.isParameter(ins)) {
+        string name = ins.op.name();
+        string rtg_name = convert.lookup(name);
+        if (rtg_name != "") {
+            
+        } else {
+            CHECK(false) << "Unknown RTG instruction";
+        }
+        if (convert.isParameter(name)) {
             SetParamAttr(ins, attrs, convert);
         } else if (convert.isConstant(ins)) {
             SetConstAttr(ins, attrs, convert);
@@ -489,6 +512,7 @@ Status ConvertSubgraphToRTG(std::unique_ptr<Graph>* g, Cluster& cluster, T_INPUT
     bwd_convert.device = device;
     TF_RETURN_IF_ERROR(BuildLaunchNode(g, cluster, bwd_convert, cluster_name));
 
+    delete program;
     return Status::OK();    
 }
 

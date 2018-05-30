@@ -30,16 +30,6 @@ RTGLaunchOp::RTGLaunchOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
   const NameAttrList* func;
   OP_REQUIRES_OK(ctx, ctx->GetAttr("function", &func));
   function_ = *func;
-  auto attr_map = func->attr();
-  AttrValue value = attr_map.at("func");
-  int size = value.list().func_size();
-  for (int i = 0; i < size; ++i) {
-      const NameAttrList& func = value.list().func(i);
-      auto map = func.attr();
-      string name = func.name();
-      
-  }
-  
 }
 
 void RTGLaunchOp::Compute(OpKernelContext* ctx) {

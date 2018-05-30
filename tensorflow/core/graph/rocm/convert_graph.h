@@ -51,6 +51,9 @@ typedef const std::vector<std::pair<string, Tensor>> T_INPUT_MAP;
 class  Converter;
 using OpConverter =
     std::function<tensorflow::Status(Converter&, const tensorflow::NodeDef&, const T_RTG_INST_V&)>;
+
+using AttrConverter=
+    std::function<void(rtg::instruction&, NameAttrList&, Converter&)>;
     
 struct Converter {
     explicit Converter(rtg::program* p, T_INPUT_MAP* map) {
@@ -59,7 +62,7 @@ struct Converter {
     bool isActivation(const rtg::instruction&);
     bool isConstant(const rtg::instruction&);
     bool isConvolution(const rtg::instruction&);
-    bool isParameter(const rtg::instruction&);
+    bool isParameter(const string);
     bool isCandidate(const Node*);
     bool isRegistered(const Node*);
     void add_instruction(const Node*);
@@ -70,13 +73,17 @@ struct Converter {
     DataType getType(const rtg::shape::type_t&);
     void getTensorShape(const rtg::shape&, TensorShape&);
     std::unordered_map<string, OpConverter> op_registry_;
+    std::unordered_map<string, AttrConverter> attr_registry_;
     void Init() {
         register_op_converters();
+        register_attr_converters();
         instructions.clear();
         rtgInsNames.clear();
         rtgInsCnt.clear();
     }
+    string lookup(const string);
     void register_op_converters();
+    void register_attr_converters();
     bool starts_with(const string& value, const string& prefix);
     std::unordered_map<string, rtg::instruction*> instructions;
     std::unordered_map<rtg::instruction*, string> rtgInsNames;
