@@ -110,13 +110,20 @@ void Converter::register_op_converters()  {
 #endif    
 }
 
-void Converter::register_attr_converters() {
-    attr_registry_["@param"] = SetParamAttr;
-    attr_registry_["@literal"] = SetConstAttr;
-    attr_registry_["convolution"] = SetConvolutionAttr;
-    attr_registry_["activation"] = SetActivationAttr;
+void Converter::register_attr_encoders() {
+    attr_encoder_registry_["@param"] = EncodeParamAttr;
+    attr_encoder_registry_["@literal"] = EncodeConstAttr;
+    attr_encoder_registry_["convolution"] = EncodeConvolutionAttr;
+    attr_encoder_registry_["activation"] = EncodeActivationAttr;
 }
 
+void Converter::register_attr_decoders() {
+    attr_decoder_registry_["@param"] = DecodeParamAttr;
+    attr_decoder_registry_["@literal"] = DecodeConstAttr;
+    attr_decoder_registry_["convolution"] = DecodeConvolutionAttr;
+    attr_decoder_registry_["activation"] = DecodeActivationAttr;
+}
+    
 bool Converter::starts_with(const string& value, const string& prefix)
 {
     if (prefix.size() <= value.size()) {
@@ -125,38 +132,25 @@ bool Converter::starts_with(const string& value, const string& prefix)
     return false;
 }
 
-string Converter::lookup(const string name)
+string Converter::lookupEncoder(const string name)
 {
-    for (auto iter = attr_registry_.begin(); iter != attr_registry_.end(); ++iter) {
+    for (auto iter = attr_encoder_registry_.begin(); iter != attr_encoder_registry_.end(); ++iter) {
         string rtg_name = iter->first;
         if (starts_with(name, rtg_name))
             return rtg_name;
     }
     return "";
 }
-    
-bool Converter::isParameter(const string name) 
-{
-    return starts_with(name, "@param");
-}
 
-bool Converter::isConstant(const rtg::instruction& ins)
+string Converter::lookupDecoder(const string name)
 {
-    string name = ins.op.name();
-    return starts_with(name, "@literal");
-}
-
-bool Converter::isConvolution(const rtg::instruction& ins)
-{
-    string name = ins.op.name();
-    return starts_with(name, "convolution");
-}
-
-bool Converter::isActivation(const rtg::instruction& ins)
-{
-    string name = ins.op.name();
-    return starts_with(name, "activation");
-}
+    for (auto iter = attr_decoder_registry_.begin(); iter != attr_decoder_registry_.end(); ++iter) {
+        string rtg_name = iter->first;
+        if (starts_with(name, rtg_name))
+            return rtg_name;
+    }
+    return "";
+}    
     
 bool Converter::isRegistered(const Node * node) {
     return op_registry_.count(node->type_string());
@@ -194,6 +188,18 @@ void Converter::add_instruction(const Node* node)  {
     }
     Status s = op_converter(*this, node->def(), inputs);;
     CHECK(s == Status::OK()) << "fail to add instruction";
+}
+
+void Converter::decodeAttr(const NameAttrList& func)
+{
+    string name = func.name();
+    string rtg_name = lookupDecoder(name);
+    if (rtg_name != "") {
+        AttrDecoder attr_decoder = attr_decoder_registry_.at(rtg_name);
+        attr_decoder(func, this);
+    } else {
+        CHECK(false) << "Unknown RTG instruction";
+    }
 }
 
 DataType Converter::getType(const rtg::shape::type_t& shape_type)
@@ -312,12 +318,12 @@ void SetInputAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert
     }    
 }    
 
-void SetActivationAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
+void EncodeActivationAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
     SetNameAttr(ins, attrs, convert);
     SetInputAttr(ins, attrs, convert);
 }
     
-void SetParamAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
+void EncodeParamAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
     rtg::shape shape = ins.result;
     string name = ins.op.name();
     attrs.set_name(name);
@@ -334,7 +340,7 @@ void SetParamAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert
     (*attr_map)["shape"] = s_value;
 }
 
-void SetConstAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
+void EncodeConstAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
     SetNameAttr(ins, attrs, convert);
     rtg::shape shape = ins.result;
     DataType type = convert.getType(shape.type());
@@ -351,10 +357,31 @@ void SetConstAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert
     (*attr_map)["value"] = value;
 }
 
-void SetConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
+void EncodeConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
     SetNameAttr(ins, attrs, convert);
     SetInputAttr(ins, attrs, convert);
     // TODO: get stride, padding, dilation.embedded in name?
+}
+
+void DecodeActivationAttr(const NameAttrList& func, Converter* convert) {
+
+}
+
+void DecodeConstAttr(const NameAttrList& func, Converter* convert) {
+
+}
+
+void DecodeConvolutionAttr(const NameAttrList& func, Converter* convert) {
+
+}
+
+void DecodeParamAttr(const NameAttrList& func, Converter* convert) {
+    auto map = func.attr();
+    const TensorShapeProto & shape_proto = map.at("shape").shape();
+    int size;
+    for (const auto& dim_proto : shape_proto.dim()) {
+        size = dim_proto.size();
+    }
 }
 
 Status BuildLaunchNode(std::unique_ptr<Graph>* g, Cluster& cluster, Converter& convert, string& name)
@@ -397,20 +424,10 @@ Status BuildLaunchNode(std::unique_ptr<Graph>* g, Cluster& cluster, Converter& c
         NameAttrList& attrs = *(value.mutable_list()->add_func());
         attrs.Clear();
         string name = ins.op.name();
-        string rtg_name = convert.lookup(name);
+        string rtg_name = convert.lookupEncoder(name);
         if (rtg_name != "") {
-            
-        } else {
-            CHECK(false) << "Unknown RTG instruction";
-        }
-        if (convert.isParameter(name)) {
-            SetParamAttr(ins, attrs, convert);
-        } else if (convert.isConstant(ins)) {
-            SetConstAttr(ins, attrs, convert);
-        } else if (convert.isConvolution(ins)) {
-            SetConvolutionAttr(ins, attrs, convert);
-        } else if (convert.isActivation(ins)) {
-            SetActivationAttr(ins, attrs, convert);
+            AttrEncoder attr_encoder = convert.attr_encoder_registry_.at(rtg_name);
+            attr_encoder(ins, attrs, convert);
         } else {
             CHECK(false) << "Unknown RTG instruction";
         }

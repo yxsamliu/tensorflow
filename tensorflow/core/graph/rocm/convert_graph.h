@@ -52,38 +52,42 @@ class  Converter;
 using OpConverter =
     std::function<tensorflow::Status(Converter&, const tensorflow::NodeDef&, const T_RTG_INST_V&)>;
 
-using AttrConverter=
+using AttrEncoder=
     std::function<void(rtg::instruction&, NameAttrList&, Converter&)>;
+
+using AttrDecoder=
+    std::function<void(const NameAttrList&, Converter*)>;
     
 struct Converter {
     explicit Converter(rtg::program* p, T_INPUT_MAP* map) {
         Init(); program = p; inputs = map;
     }
-    bool isActivation(const rtg::instruction&);
-    bool isConstant(const rtg::instruction&);
-    bool isConvolution(const rtg::instruction&);
-    bool isParameter(const string);
     bool isCandidate(const Node*);
     bool isRegistered(const Node*);
     void add_instruction(const Node*);
     void add_parameter(const NodeDef&);
+    void decodeAttr(const NameAttrList&);
     void getNodeType(const NodeDef&, DataType*);
     rtg::shape getNodeShape(const NodeDef&, DataType* p_dtype = nullptr);
     rtg::shape::type_t getShapeType(const DataType&);
     DataType getType(const rtg::shape::type_t&);
     void getTensorShape(const rtg::shape&, TensorShape&);
     std::unordered_map<string, OpConverter> op_registry_;
-    std::unordered_map<string, AttrConverter> attr_registry_;
+    std::unordered_map<string, AttrEncoder> attr_encoder_registry_;
+    std::unordered_map<string, AttrDecoder> attr_decoder_registry_;
     void Init() {
         register_op_converters();
-        register_attr_converters();
+        register_attr_encoders();
+        register_attr_decoders();
         instructions.clear();
         rtgInsNames.clear();
         rtgInsCnt.clear();
     }
-    string lookup(const string);
+    string lookupEncoder(const string);
+    string lookupDecoder(const string);
     void register_op_converters();
-    void register_attr_converters();
+    void register_attr_encoders();
+    void register_attr_decoders();
     bool starts_with(const string& value, const string& prefix);
     std::unordered_map<string, rtg::instruction*> instructions;
     std::unordered_map<rtg::instruction*, string> rtgInsNames;
@@ -108,10 +112,15 @@ Status ConvertSubGraphToRTG(std::unique_ptr<Graph>*, Cluster&, T_INPUT_MAP*);
 Status BuildLaunchNode(std::unique_ptr<Graph>*, Cluster&,Converter&, string&);
 void SetInputAttr(rtg::instruction&, NameAttrList&, Converter&);
 void SetNameAttr(rtg::instruction&, NameAttrList&, Converter&); 
-void SetActivationAttr(rtg::instruction&, NameAttrList&, Converter&); 
-void SetConstAttr(rtg::instruction&, NameAttrList&, Converter&); 
-void SetConvolutionAttr(rtg::instruction&, NameAttrList&, Converter&);
-void SetParamAttr(rtg::instruction&, NameAttrList&, Converter&); 
+void EncodeActivationAttr(rtg::instruction&, NameAttrList&, Converter&); 
+void EncodeConstAttr(rtg::instruction&, NameAttrList&, Converter&); 
+void EncodeConvolutionAttr(rtg::instruction&, NameAttrList&, Converter&);
+void EncodeParamAttr(rtg::instruction&, NameAttrList&, Converter&);
+void DecodeActivationAttr(const NameAttrList&, Converter*);
+void DecodeConstAttr(const NameAttrList&, Converter*);
+void DecodeConvolutionAttr(const NameAttrList&, Converter*);
+void DecodeParamAttr(const NameAttrList&, Converter*); 
+ 
 } // namspace convert
 } // namespace rtglib
 } // namespace tensorflow

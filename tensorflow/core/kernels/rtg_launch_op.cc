@@ -29,13 +29,13 @@ namespace tensorflow {
 RTGLaunchOp::RTGLaunchOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
   const NameAttrList* func;
   OP_REQUIRES_OK(ctx, ctx->GetAttr("function", &func));
-  function_ = *func;
+  program = nullptr;
+  rtglib::convert::GetProgram(*func, &program);
 }
 
 void RTGLaunchOp::Compute(OpKernelContext* ctx) {
   VLOG(1) << "RTGLaunchOp::Compute ";
-  void * program;
-  rtglib::convert::GetProgram(function_, &program);
+  
   gpu::Stream* stream =
       ctx->op_device_context() ? ctx->op_device_context()->stream() : nullptr;
 
