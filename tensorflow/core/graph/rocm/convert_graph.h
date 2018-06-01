@@ -56,7 +56,7 @@ using AttrEncoder=
     std::function<void(rtg::instruction&, NameAttrList&, Converter&)>;
 
 using AttrDecoder=
-    std::function<void(const NameAttrList&, Converter*)>;
+    std::function<void(const NameAttrList&, Converter*, string&)>;
     
 struct Converter {
     explicit Converter(rtg::program* p, T_INPUT_MAP* map) {
@@ -69,6 +69,7 @@ struct Converter {
     void decodeAttr(const NameAttrList&);
     void getNodeType(const NodeDef&, DataType*);
     rtg::shape getNodeShape(const NodeDef&, DataType* p_dtype = nullptr);
+    rtg::shape getAttrShape(const NameAttrList&);
     rtg::shape::type_t getShapeType(const DataType&);
     DataType getType(const rtg::shape::type_t&);
     void getTensorShape(const rtg::shape&, TensorShape&);
@@ -88,17 +89,20 @@ struct Converter {
     void register_op_converters();
     void register_attr_encoders();
     void register_attr_decoders();
-    bool starts_with(const string& value, const string& prefix);
+    bool starts_with(const string&, const string&);
+    string substract_prefix(const string&, const string&);
     std::unordered_map<string, rtg::instruction*> instructions;
     std::unordered_map<rtg::instruction*, string> rtgInsNames;
     std::unordered_map<string, int> rtgInsCnt;
     rtg::program* program;
     T_INPUT_MAP* inputs;
     static const string prefix;
+    static const string postfix;
     string device;
 };
 
 const string Converter::prefix = "@";
+const string Converter::postfix = "@"; 
  
 Status AddActivation(Converter&, const NodeDef&, const T_RTG_INST_V&);
 Status AddBiasAdd(Converter&, const NodeDef&, const T_RTG_INST_V&);
@@ -116,10 +120,10 @@ void EncodeActivationAttr(rtg::instruction&, NameAttrList&, Converter&);
 void EncodeConstAttr(rtg::instruction&, NameAttrList&, Converter&); 
 void EncodeConvolutionAttr(rtg::instruction&, NameAttrList&, Converter&);
 void EncodeParamAttr(rtg::instruction&, NameAttrList&, Converter&);
-void DecodeActivationAttr(const NameAttrList&, Converter*);
-void DecodeConstAttr(const NameAttrList&, Converter*);
-void DecodeConvolutionAttr(const NameAttrList&, Converter*);
-void DecodeParamAttr(const NameAttrList&, Converter*); 
+void DecodeActivationAttr(const NameAttrList&, Converter*, string&);
+void DecodeConstAttr(const NameAttrList&, Converter*, string&);
+void DecodeConvolutionAttr(const NameAttrList&, Converter*, string&);
+void DecodeParamAttr(const NameAttrList&, Converter*, string&); 
  
 } // namspace convert
 } // namespace rtglib

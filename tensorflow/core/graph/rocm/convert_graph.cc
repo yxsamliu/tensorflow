@@ -132,6 +132,22 @@ bool Converter::starts_with(const string& value, const string& prefix)
     return false;
 }
 
+string Converter::substract_prefix(const string& value, const string& prefix) {
+    CHECK(prefix.length() < value.length()) << "unexpected prefix";
+    string str = value.substr(prefix.length());
+    if (starts_with(str, ":"))
+        str = str.substr(1);
+#if 0
+    if (starts_with(str, Converter::prefix)) {
+        str = str.substr(Converter::prefix.length());
+        std::size_t pos = str.find(Converter::postfix);
+        CHECK(pos != std::string::npos) << "Postfix unfound";
+        str = str.substr(pos + Converter::postfix.length());
+    }
+#endif    
+    return str;
+}
+
 string Converter::lookupEncoder(const string name)
 {
     for (auto iter = attr_encoder_registry_.begin(); iter != attr_encoder_registry_.end(); ++iter) {
@@ -196,7 +212,7 @@ void Converter::decodeAttr(const NameAttrList& func)
     string rtg_name = lookupDecoder(name);
     if (rtg_name != "") {
         AttrDecoder attr_decoder = attr_decoder_registry_.at(rtg_name);
-        attr_decoder(func, this);
+        attr_decoder(func, this, rtg_name);
     } else {
         CHECK(false) << "Unknown RTG instruction";
     }
@@ -245,6 +261,20 @@ rtg::shape::type_t Converter::getShapeType(const DataType& data_type)
     }
 }
 
+rtg::shape Converter::getAttrShape(const NameAttrList& func)
+{
+    auto map = func.attr();
+    DataType data_type = map.at("dtype").type();
+    const TensorShapeProto & shape_proto = map.at("shape").shape();
+    std::vector<std::size_t> dims;
+    for (const auto& dim_proto : shape_proto.dim()) {
+        int size = dim_proto.size();
+        dims.push_back(size);
+    }
+    rtg::shape::type_t shape_type = getShapeType(data_type);
+    return {shape_type, dims};
+}
+
 rtg::shape Converter::getNodeShape(const NodeDef& nodeDef, DataType *p_dtype) {
     std::string name = nodeDef.name();
     DataType data_type;
@@ -260,7 +290,7 @@ rtg::shape Converter::getNodeShape(const NodeDef& nodeDef, DataType *p_dtype) {
         CHECK(data_type == d_type) << "data type unmatched";
         const TensorShape& tensor_shape = raw_val.tensor_shape();
         for (int64 i = 0, e = tensor_shape.dims(); i < e; i++)
-            dims.push_back(tensor_shape.dim_size(i));    
+            dims.push_back(tensor_shape.dim_size(i));
     } else if (inputs != nullptr) {
         // CHECK(node->type_string() == "_Arg") << "unknown shape";
         CHECK(nodeDef.attr().count("index")) << "unknown argument index";
@@ -294,7 +324,7 @@ void SetNameAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert)
     } else {
         cnt = (convert.rtgInsCnt[name])++;
     }
-    string new_name = ins.op.name() + Converter::prefix + std::to_string(cnt);
+    string new_name = ins.op.name() + Converter::prefix + std::to_string(cnt) + Converter::postfix;
     attrs.set_name(new_name);
     convert.rtgInsNames[&ins] = new_name;
 }
@@ -363,25 +393,50 @@ void EncodeConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter
     // TODO: get stride, padding, dilation.embedded in name?
 }
 
-void DecodeActivationAttr(const NameAttrList& func, Converter* convert) {
+void DecodeActivationAttr(const NameAttrList& func, Converter* convert, string&prefix) {
 
 }
 
-void DecodeConstAttr(const NameAttrList& func, Converter* convert) {
-
-}
-
-void DecodeConvolutionAttr(const NameAttrList& func, Converter* convert) {
-
-}
-
-void DecodeParamAttr(const NameAttrList& func, Converter* convert) {
+void DecodeConstAttr(const NameAttrList& func, Converter* convert, string& prefix) {
+    string name = func.name();
     auto map = func.attr();
-    const TensorShapeProto & shape_proto = map.at("shape").shape();
-    int size;
-    for (const auto& dim_proto : shape_proto.dim()) {
-        size = dim_proto.size();
+    const auto& tensor = map.at("value").tensor();
+    const TensorShapeProto& tensor_shape = tensor.tensor_shape();
+    auto& content = tensor.tensor_content();
+    DataType data_type = tensor.dtype();
+    std::vector<std::size_t> dims;
+    for (const auto& dim_proto : tensor_shape.dim()) {
+        int size = dim_proto.size();
+        dims.push_back(size);
     }
+    rtg::shape::type_t shape_type = convert->getShapeType(data_type);
+    rtg::shape shape = {shape_type, dims};
+    rtg::literal li;
+    switch (data_type) {
+    case DT_FLOAT:{
+        const float * ptr = reinterpret_cast<const float*>(content.data());
+        int size = content.size()/sizeof(float);
+        std::vector<float> data;
+        for (int i = 0; i < size; i++)
+            data.push_back(ptr[i]);
+        li = rtg::literal{shape, data.begin(), data.end()};
+        break;
+    }
+    default:
+        CHECK(false) << "unknown data type";
+    }
+    convert->instructions[name] = convert->program->add_literal(li);
+}
+
+void DecodeConvolutionAttr(const NameAttrList& func, Converter* convert, string& prefix) {
+
+}
+
+void DecodeParamAttr(const NameAttrList& func, Converter* convert, string& prefix) {
+    string name = func.name();
+    const rtg::shape shape = convert->getAttrShape(func);
+    string orig_name = convert->substract_prefix(name, prefix);
+    convert->instructions[name] = convert->program->add_parameter(orig_name, shape);
 }
 
 Status BuildLaunchNode(std::unique_ptr<Graph>* g, Cluster& cluster, Converter& convert, string& name)
