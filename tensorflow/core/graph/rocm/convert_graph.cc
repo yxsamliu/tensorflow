@@ -18,7 +18,7 @@ limitations under the License.
 #include "convert_graph.h"
 #include "dump_graph.h"
 #include "rocm/include/rtg/operators.hpp"
-
+#include "tensorflow/core/lib/gtl/array_slice.h"
 #include <stack>
 #include <unordered_map>
 
@@ -390,7 +390,14 @@ void EncodeConstAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& conv
 void EncodeConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter& convert) {
     SetNameAttr(ins, attrs, convert);
     SetInputAttr(ins, attrs, convert);
-    // TODO: get stride, padding, dilation.embedded in name?
+    // TODO: get stride, padding, dilation
+#if 0    
+    std::vector<int64> strides;
+    rtg::convolution op = ins.op;
+    for (auto iter = op.stride.begin(); iter != op.stride.end(); ++iter)
+        strides.push_back(*iter);
+#endif
+    tensorflow::gtl::ArraySlice<int64> value;
 }
 
 void DecodeActivationAttr(const NameAttrList& func, Converter* convert, string&prefix) {
@@ -429,7 +436,19 @@ void DecodeConstAttr(const NameAttrList& func, Converter* convert, string& prefi
 }
 
 void DecodeConvolutionAttr(const NameAttrList& func, Converter* convert, string& prefix) {
-
+    string name = func.name();
+    auto map = func.attr();
+    int32 num_of_inputs = map.at("num_inputs").i();
+    T_RTG_INST_V inputs;
+    for (int i = 0; i < num_of_inputs; ++i) {
+        string input_name = "input" + std::to_string(i);
+        string arg_name = map.at(input_name).s();
+        CHECK(convert->instructions.find(arg_name) != convert->instructions.end()) << "Iput no found";
+        inputs.push_back(convert->instructions[arg_name]);
+    }
+    rtg::convolution op;
+    // get padding, strides, dilations.
+    convert->instructions[name] = convert->program->add_instruction(op, inputs);
 }
 
 void DecodeParamAttr(const NameAttrList& func, Converter* convert, string& prefix) {
