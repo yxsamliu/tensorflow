@@ -186,7 +186,6 @@ RcclManager::Communicator* RcclManager::GetCommunicator(
               return a->executor < b->executor;
             });
   const int num_devices = collective->participants.size();
-
   mutex_lock l(mu_);
 
   // Scan to find an existing communicator that provides rccl communication
@@ -258,6 +257,20 @@ RcclManager::Communicator* RcclManager::GetCommunicator(
     members[i].rccl_stream = rccl_stream;
     devices[i] = collective->participants[i]->gpu_device_id;
   }
+
+  int currDevice;
+  auto status = hipGetDevice(&currDevice);
+
+  for(int i = 0; i < num_devices; i++) {
+    hipSetDevice(devices[i]);
+    for(int j = 0; j < num_devices; j++) {
+      if(devices[i] != devices[j]) {
+        hipDeviceEnablePeerAccess(devices[j], 0);
+      }
+    }
+  }
+
+  hipSetDevice(currDevice);
 
   std::vector<rcclComm_t> rccl_comms(num_devices);
   auto result = rcclCommInitAll(rccl_comms.data(), num_devices, devices.data());
@@ -419,7 +432,6 @@ void RcclManager::LoopKernelLaunches(RcclStream* rccl_stream) {
       case kAllReduce: {
         const void* sendbuff = p->in_t->tensor_data().data();
         void* recvbuff = const_cast<char*>(p->out_t->tensor_data().data());
-
         rccl_result =
             rcclAllReduce(sendbuff, recvbuff, p->in_t->NumElements(), data_type,
                           collective->reduction_op, rccl_comm, *cu_stream);

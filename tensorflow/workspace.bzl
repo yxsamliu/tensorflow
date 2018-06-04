@@ -601,10 +601,10 @@ def tf_workspace(path_prefix="", tf_repo_name=""):
   temp_workaround_http_archive(
       name = "rccl_archive",
       urls = [
-	  "https://github.com/ROCmSoftwarePlatform/rccl/archive/0.1.0.tar.gz",
+	  "https://github.com/ROCmSoftwarePlatform/rccl/archive/0.0.5.1.tar.gz",
       ],
-      sha256 = "ba477caf3923bdd13b1e38bb01e5ddaeace67bd228e1dbd8784e4ba51571cac1",
-      strip_prefix = "rccl-0.1.0",
+      sha256 = "fdb14b6ad8fa3813c435091e390e9923e5ca911d49d9f5ad3caa6c4bc610ee08",
+      strip_prefix = "rccl-0.0.5.1",
       build_file = str(Label("//third_party:rccl.BUILD")),
       repository = tf_repo_name,
   )
