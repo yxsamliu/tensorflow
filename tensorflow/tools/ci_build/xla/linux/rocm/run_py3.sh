@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2016 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,13 +27,17 @@ echo ""
 # Run configure.
 export TF_NEED_GCP=0
 export TF_NEED_HDFS=0
-export TF_NEED_CUDA=0
-export TF_NEED_ROCM=0
-export PYTHON_BIN_PATH=`which python2`
+export PYTHON_BIN_PATH=`which python3`
+
+export TF_NEED_ROCM=1
+export TF_ENABLE_XLA=1
+#export TF_CUDA_COMPUTE_CAPABILITIES=3.7
+
 yes "" | ./configure
 
 # Run bazel test command. Double test timeouts to avoid flakes.
-bazel test --test_tag_filters=-no_oss,-gpu,-benchmark-test --test_lang_filters=py -k \
-    --jobs=${N_JOBS} --test_timeout 300,450,1200,3600 --build_tests_only \
-    --test_output=errors -- \
-    //tensorflow/... -//tensorflow/compiler/... -//tensorflow/contrib/...
+bazel test --config=rocm --test_tag_filters=-no_gpu,-benchmark-test -k \
+    --jobs=${N_JOBS} --test_timeout 300,450,1200,3600 \
+    --build_tests_only --test_output=errors --local_test_jobs=8 \
+    --run_under=//tensorflow/tools/ci_build/gpu_build:parallel_gpu_execute -- \
+    //tensorflow/compiler/...
