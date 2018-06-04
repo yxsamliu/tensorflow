@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifdef GOOGLE_CUDA
+#ifdef TENSORFLOW_USE_ROCM
 
 #include <algorithm>
 #include <vector>
@@ -283,4 +283,4 @@ TEST_F(RcclManagerTest, MultipleCallers) {
 
 }  // namespace tensorflow
 
-#endif  // GOOGLE_CUDA
+#endif  // TENSORFLOW_USE_ROCM

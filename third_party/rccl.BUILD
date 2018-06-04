@@ -34,19 +34,6 @@ cc_library(
         "-O3",
     ] + rocm_default_copts(),
     linkopts = select({
-        "@%ws%//tensorflow:android": [
-            "-pie",
-        ],
-        "@%ws%//tensorflow:darwin": [
-            "-Wl,-framework",
-            "-Wl,CoreFoundation",
-            "-Wl,-framework",
-            "-Wl,Security",
-        ],
-        "@%ws%//tensorflow:ios": [],
-        "@%ws%//tensorflow:windows": [
-            "ws2_32.lib",
-        ],
         "//conditions:default": [
             "-lrt",
         ],
