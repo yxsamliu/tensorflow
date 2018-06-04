@@ -124,3 +124,5 @@ cd ~/ && wget http://repo.radeon.com/rocm/misc/tensorflow/tensorflow-1.3.0-cp35-
 # Pip3 install the whl package 
 cd ~ && sudo pip3 install tensorflow-1.3.0-cp35-cp35m-manylinux1_x86_64.whl && rm tensorflow-1.3.0-cp35-cp35m-manylinux1_x86_64.whl
 ```
+
+And then follow the instructions in the quickstart under `rocm_docs`.  
