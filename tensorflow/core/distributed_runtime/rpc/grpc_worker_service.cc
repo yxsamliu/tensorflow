@@ -23,7 +23,7 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/device.h"
 #include "tensorflow/core/common_runtime/device_mgr.h"
 #include "tensorflow/core/common_runtime/dma_helper.h"
-#if GOOGLE_CUDA
+#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 #include "tensorflow/core/common_runtime/gpu/gpu_util.h"
 #endif  // GOOGLE_CUDA
 #include "tensorflow/core/common_runtime/local_device.h"
@@ -345,7 +345,7 @@ void GrpcWorker::RecvTensorAsync(CallOptions* opts,
           {
             // Non-DMA cases.
             if (src_dev->tensorflow_gpu_device_info() && (!on_host)) {
-#if GOOGLE_CUDA
+#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
               const DeviceContext* send_dev_context = send_args.device_context;
               RecvTensorResponse* tmp = new RecvTensorResponse;
               tmp->set_is_dead(is_dead);

@@ -17,9 +17,6 @@ limitations under the License.
 
 #define EIGEN_USE_GPU
 
-#if TENSORFLOW_USE_ROCM
-#define EIGEN_USE_HIP
-#endif
 
 #include "tensorflow/core/kernels/segment_reduction_ops.h"
 
@@ -129,7 +126,7 @@ struct UnsortedSegmentSumFunctor<GPUDevice, T, Index>: UnsortedSegmentBaseFuncto
   DEFINE_GPU_SPECS_INDEX(T, int32); \
   DEFINE_GPU_SPECS_INDEX(T, int64);
 
-TF_CALL_GPU_NUMBER_TYPES(DEFINE_GPU_SPECS);
+TF_CALL_GPU_NUMBER_TYPES_NO_HALF(DEFINE_GPU_SPECS);
 TF_CALL_complex64(DEFINE_GPU_SPECS);
 TF_CALL_complex128(DEFINE_GPU_SPECS);
 

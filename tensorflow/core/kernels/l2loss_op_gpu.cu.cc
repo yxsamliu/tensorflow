@@ -13,25 +13,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-//#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-//
-//#define EIGEN_USE_GPU
-//
-//#if TENSORFLOW_USE_ROCM
-//#define EIGEN_USE_HIP
-//#endif
-//
-//#include "tensorflow/core/kernels/l2loss_op.h"
-//
-//#include "tensorflow/core/framework/register_types.h"
-//
-//namespace tensorflow {
-//
-//typedef Eigen::GpuDevice GPUDevice;
-//template struct functor::L2Loss<GPUDevice, float>;
-//template struct functor::L2Loss<GPUDevice, double>;
-//template struct functor::L2Loss<GPUDevice, Eigen::half>;
-//
-//}  // namespace tensorflow
-//
-//#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+
+#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+
+#define EIGEN_USE_GPU
+
+
+#include "tensorflow/core/kernels/l2loss_op.h"
+
+#include "tensorflow/core/framework/register_types.h"
+
+namespace tensorflow {
+
+typedef Eigen::GpuDevice GPUDevice;
+template struct functor::L2Loss<GPUDevice, float>;
+template struct functor::L2Loss<GPUDevice, double>;
+template struct functor::L2Loss<GPUDevice, Eigen::half>;
+
+}  // namespace tensorflow
+
+#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+

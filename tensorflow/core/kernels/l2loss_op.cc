@@ -57,33 +57,34 @@ REGISTER_KERNEL(double);
 REGISTER_KERNEL(Eigen::half);
 #undef REGISTER_KERNEL
 
-//#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-//// Forward declarations of the functor specializations for GPU.
-//namespace functor {
-//#define DECLARE_GPU_SPEC(T)                                                    \
-//  template <>                                                                  \
-//  void L2Loss<GPUDevice, T>::operator()(const GPUDevice& d,                    \
-//                                        typename TTypes<T>::ConstTensor input, \
-//                                        typename TTypes<T>::Scalar output);    \
-//  extern template struct L2Loss<GPUDevice, T>;
-//
-//DECLARE_GPU_SPEC(float);
-//DECLARE_GPU_SPEC(double);
-//DECLARE_GPU_SPEC(Eigen::half);
-//#undef DECLARE_GPU_SPEC
-//}  // namespace functor
-//
-//// Registration of the GPU implementations.
-//#define REGISTER_GPU_KERNEL(T)                                  \
-//  REGISTER_KERNEL_BUILDER(                                      \
-//      Name("L2Loss").Device(DEVICE_GPU).TypeConstraint<T>("T"), \
-//      L2LossOp<GPUDevice, T>);
-//
+#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+// Forward declarations of the functor specializations for GPU.
+namespace functor {
+#define DECLARE_GPU_SPEC(T)                                                    \
+  template <>                                                                  \
+  void L2Loss<GPUDevice, T>::operator()(const GPUDevice& d,                    \
+                                        typename TTypes<T>::ConstTensor input, \
+                                        typename TTypes<T>::Scalar output);    \
+  extern template struct L2Loss<GPUDevice, T>;
+
+DECLARE_GPU_SPEC(float);
+DECLARE_GPU_SPEC(double);
+DECLARE_GPU_SPEC(Eigen::half);
+#undef DECLARE_GPU_SPEC
+}  // namespace functor
+
+// Registration of the GPU implementations.
+#define REGISTER_GPU_KERNEL(T)                                  \
+  REGISTER_KERNEL_BUILDER(                                      \
+      Name("L2Loss").Device(DEVICE_GPU).TypeConstraint<T>("T"), \
+      L2LossOp<GPUDevice, T>);
+
+// Comment out due to poor mGPU performance.
 //REGISTER_GPU_KERNEL(float);
 //REGISTER_GPU_KERNEL(double);
 //REGISTER_GPU_KERNEL(Eigen::half);
-//#undef REGISTER_GPU_KERNEL
-//
-//#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#undef REGISTER_GPU_KERNEL
+
+#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 
 }  // namespace tensorflow

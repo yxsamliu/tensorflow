@@ -27,7 +27,6 @@ limitations under the License.
 #include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 #include "tensorflow/core/lib/random/philox_random.h"
 
-
 namespace tensorflow {
 namespace random {
 
@@ -534,7 +533,15 @@ PHILOX_DEVICE_INLINE Eigen::half Uint16ToHalf(uint16 x) {
   const uint16 val = (exp << 10) | man;
 
   Eigen::half result;
+
+  // The underlying Eigen::Half implementation is different on the CPU vs the GPU
+  // So need to handle this assignment differently depending on what we are compiling for
+#if defined(TENSORFLOW_USE_ROCM_HIP_FP16)
+  result.x = __ushort_as_half(val);
+#else  
   result.x = val;
+#endif
+
   return result - Eigen::half(1.0);
 }
 

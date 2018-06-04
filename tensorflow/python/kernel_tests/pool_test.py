@@ -273,7 +273,10 @@ class PoolingTest(test.TestCase):
               strides=[1, 2],
               dilation_rate=[1, 1],
               data_format="NCHW")
-          self._test(
+          if not test.is_built_with_rocm() :
+            # MIOPEN currently does not support 5D tensors,
+            # so skip this test when running with ROCm
+            self._test(
               input_shape=[2, 2, 7, 5, 3],
               window_shape=[2, 2, 2],
               padding=padding,

@@ -17,7 +17,6 @@ limitations under the License.
 
 #define EIGEN_USE_GPU
 
-#define EIGEN_USE_HIP
 
 #include "tensorflow/core/common_runtime/gpu/gpu_device.h"
 
@@ -747,7 +746,7 @@ static int GetMinGPUMultiprocessorCount(
 
 namespace {
 
-std::vector<int> supported_amdgpu_isa_versions = { 803, 900 };
+std::vector<int> supported_amdgpu_isa_versions = { 803, 900, 906 };
 
 std::vector<int> GetSupportedAMDGPUISAVersions() {
   return supported_amdgpu_isa_versions;

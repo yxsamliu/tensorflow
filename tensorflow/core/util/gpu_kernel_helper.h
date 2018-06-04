@@ -460,17 +460,50 @@ GPU_ATOMIC_WRAPPER(Add, double) {
   uint64* address_as_ull = reinterpret_cast<uint64*>(address);
   uint64 old = *address_as_ull, assumed;
 
+#if defined(TENSORFLOW_USE_ROCM)
+  // FIXME remove the following workaround once the bug is fixed
+  // There is compiler bug in the implementation of __longlong_as_double
+  // in ROCm, need to workaround that
+  double* assumed_as_double = reinterpret_cast<double*>(&assumed);
+#endif
+  
   do {
     assumed = old;
+
+#if defined(TENSORFLOW_USE_ROCM)
+    old = atomicCAS(address_as_ull, assumed,
+                    __double_as_longlong(val + (*assumed_as_double)));
+    
+#else
     old = atomicCAS(address_as_ull, assumed,
                     __double_as_longlong(val + __longlong_as_double(assumed)));
+#endif
 
     // Note: uses integer comparison to avoid hang in case of NaN
   } while (assumed != old);
 
-  return __longlong_as_double(old);
+#if defined(TENSORFLOW_USE_ROCM)
+  // not applying the workaround below as the return value is ignored
+#endif
+  return __longlong_as_double(old); 
 }
 
+#if defined(TENSORFLOW_USE_ROCM_HIP_FP16)
+// Implementation of Eigen::half is different when using HIP FP16 on the GPU
+inline __device__ uint32 add_to_low_half(uint32 val, float x) {
+  unsigned short low_half = static_cast<uint16>(val & 0xffffu);
+  float sum_float = __half2float(__ushort_as_half(low_half)) + x;
+  __half sum_half = __float2half(sum_float);
+  return (val & 0xffff0000u) | __half_as_ushort(sum_half);
+}
+
+inline __device__ uint32 add_to_high_half(uint32 val, float x) {
+  unsigned short high_half = static_cast<uint16>(val >> 16);
+  float sum_float = __half2float(__ushort_as_half(high_half)) + x;
+  __half sum_half = __float2half(sum_float);
+  return (val & 0xffffu) | (__half_as_ushort(sum_half) << 16);
+}
+#else
 // Helper functions for GpuAtomicAdd(half*, half), below.
 //
 // Note that if __CUDA_ARCH__ >= 530, we could probably use __hadd2()
@@ -490,7 +523,8 @@ inline __device__ uint32 add_to_high_half(uint32 val, float x) {
   high_half = static_cast<Eigen::half>(static_cast<float>(high_half) + x);
   return (val & 0xffffu) | (high_half.x << 16);
 }
-
+#endif
+ 
 // Custom implementation of atomicAdd for half. Note that we don't have
 // atomicCAS() for anything less than 32 bits, so we need to include the
 // other 16 bits in the operation.
@@ -521,7 +555,11 @@ GPU_ATOMIC_WRAPPER(Add, Eigen::half) {
     } while (assumed != old);
 
     Eigen::half ret;
+#if defined(TENSORFLOW_USE_ROCM_HIP_FP16)
+    ret.x = __ushort_as_half(old & 0xffffu);
+#else
     ret.x = old & 0xffffu;
+#endif
     return ret;
   } else {
     // The half is in the second part of the uint32 (upper 16 bits).
@@ -538,11 +576,15 @@ GPU_ATOMIC_WRAPPER(Add, Eigen::half) {
     } while (assumed != old);
 
     Eigen::half ret;
+#if defined(TENSORFLOW_USE_ROCM_HIP_FP16)
+    ret.x = __ushort_as_half(old >> 16);
+#else
     ret.x = old >> 16;
+#endif
     return ret;
   }
 }
-
+ 
 template <typename T>
 __global__ void SetZero(const int nthreads, T* bottom_diff) {
   GPU_1D_KERNEL_LOOP(index, nthreads) { *(bottom_diff + index) = T(0); }
@@ -604,11 +646,29 @@ GPU_ATOMIC_WRAPPER(Mul, float) {
 GPU_ATOMIC_WRAPPER(Mul, double) {
   uint64* address_as_ull = reinterpret_cast<uint64*>(address);
   uint64 old = *address_as_ull, assumed;
+
+#if defined(TENSORFLOW_USE_ROCM)
+  // FIXME remove the following workaround once the bug is fixed
+  // There is compiler bug in the implementation of __longlong_as_double
+  // in ROCm, need to workaround that
+  double* assumed_as_double = reinterpret_cast<double*>(&assumed);
+#endif
+  
   do {
     assumed = old;
+#if defined(TENSORFLOW_USE_ROCM)
+    old = atomicCAS(address_as_ull, assumed,
+                    __double_as_longlong(val * (*assumed_as_double)));
+    
+#else
     old = atomicCAS(address_as_ull, assumed,
                     __double_as_longlong(val * __longlong_as_double(assumed)));
+#endif
   } while (assumed != old);
+
+#if defined(TENSORFLOW_USE_ROCM)
+  // not applying the workaround below as the return value is ignored
+#endif
   return __longlong_as_double(old);
 }
 
@@ -654,11 +714,31 @@ GPU_ATOMIC_WRAPPER(Div, float) {
 GPU_ATOMIC_WRAPPER(Div, double) {
   uint64* address_as_ull = reinterpret_cast<uint64*>(address);
   uint64 old = *address_as_ull, assumed;
+
+#if defined(TENSORFLOW_USE_ROCM)
+  // FIXME remove the following workaround once the bug is fixed
+  // There is compiler bug in the implementation of __longlong_as_double
+  // in ROCm, need to workaround that
+  double* assumed_as_double = reinterpret_cast<double*>(&assumed);
+#endif
+  
   do {
     assumed = old;
+
+#if defined(TENSORFLOW_USE_ROCM)
+    old = atomicCAS(address_as_ull, assumed,
+                    __double_as_longlong((*assumed_as_double) / val));
+    
+#else
     old = atomicCAS(address_as_ull, assumed,
                     __double_as_longlong(__longlong_as_double(assumed) / val));
+#endif
+    
   } while (assumed != old);
+
+#if defined(TENSORFLOW_USE_ROCM)
+  // not applying the workaround below as the return value is ignored
+#endif
   return __longlong_as_double(old);
 }
 

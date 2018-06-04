@@ -17,9 +17,6 @@ limitations under the License.
 
 #define EIGEN_USE_GPU
 
-#if TENSORFLOW_USE_ROCM
-#define EIGEN_USE_HIP
-#endif
 
 #include "tensorflow/core/kernels/parameterized_truncated_normal_op.h"
 
@@ -211,7 +208,8 @@ struct TruncatedNormalFunctor<GPUDevice, T> {
         gen, output.data(), num_batches, samples_per_batch, num_elements,
         means.data(), means.dimension(0) == 1, stddevs.data(),
         stddevs.dimension(0) == 1, minvals.data(), minvals.dimension(0) == 1,
-        maxvals.data(), maxvals.dimension(0) == 1, kMaxIterations);
+        maxvals.data(), maxvals.dimension(0) == 1,
+        static_cast<int64>(kMaxIterations));
   };
 };
 

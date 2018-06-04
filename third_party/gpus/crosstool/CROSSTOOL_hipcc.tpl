@@ -83,7 +83,13 @@ toolchain {
   unfiltered_cxx_flag: "-D__TIMESTAMP__=\"redacted\""
   unfiltered_cxx_flag: "-D__TIME__=\"redacted\""
   unfiltered_cxx_flag: "-D__HIP_PLATFORM_HCC__"
+  # The macro EIGEN_USE_HIP is used to tell Eigen to use the HIP platform headers
+  # It needs to be always set when compiling Eigen headers
+  # (irrespective of whether the source file is being compiled via HIPCC)
+  # so adding -DEIGEN_USE_HIP as a default CXX flag here
+  unfiltered_cxx_flag: "-DEIGEN_USE_HIP"
 
+    
   # Security hardening on by default.
   # Conservative choice; -D_FORTIFY_SOURCE=2 may be unsafe in some cases.
   # We need to undef it before redefining it as some distributions now have
@@ -127,11 +133,13 @@ toolchain {
   cxx_builtin_include_directory: "/opt/rocm/include/hip"
   cxx_builtin_include_directory: "/opt/rocm/include/hip/hcc_detail"
   cxx_builtin_include_directory: "/opt/rocm/hipblas/include"
-  cxx_builtin_include_directory: "/opt/rocm/hipfft/include"
+  cxx_builtin_include_directory: "/opt/rocm/rocfft/include"
   cxx_builtin_include_directory: "/opt/rocm/hiprand/include"
   cxx_builtin_include_directory: "/opt/rocm/hcc/include"
   cxx_builtin_include_directory: "/opt/rocm/hcc/compiler/lib/clang/6.0.0/include/"
   cxx_builtin_include_directory: "/opt/rocm/hcc/lib/clang/6.0.0/include"
+  cxx_builtin_include_directory: "/opt/rocm/hcc/compiler/lib/clang/7.0.0/include/"
+  cxx_builtin_include_directory: "/opt/rocm/hcc/lib/clang/7.0.0/include"
 
   compilation_mode_flags {
     mode: DBG
@@ -234,11 +242,13 @@ toolchain {
   cxx_builtin_include_directory: "/opt/rocm/include/hip"
   cxx_builtin_include_directory: "/opt/rocm/include/hip/hcc_detail"
   cxx_builtin_include_directory: "/opt/rocm/hipblas/include"
-  cxx_builtin_include_directory: "/opt/rocm/hipfft/include"
+  cxx_builtin_include_directory: "/opt/rocm/rocfft/include"
   cxx_builtin_include_directory: "/opt/rocm/hiprand/include"
   cxx_builtin_include_directory: "/opt/rocm/hcc/include"
   cxx_builtin_include_directory: "/opt/rocm/hcc/compiler/lib/clang/6.0.0/include/"
   cxx_builtin_include_directory: "/opt/rocm/hcc/lib/clang/6.0.0/include"
+  cxx_builtin_include_directory: "/opt/rocm/hcc/compiler/lib/clang/7.0.0/include/"
+  cxx_builtin_include_directory: "/opt/rocm/hcc/lib/clang/7.0.0/include"
 
   compilation_mode_flags {
     mode: DBG

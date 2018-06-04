@@ -154,6 +154,7 @@ static port::ThreadPool* GetROCmThreadpool() {
   __macro(miopenConvolutionForwardGetWorkSpaceSize)        \
   __macro(miopenInitConvolutionDescriptor)                 \
   __macro(miopenSet4dTensorDescriptor)                     \
+  __macro(miopenGetTensorDescriptor)                       \
   __macro(miopenSetTensorDescriptor)                       \
   __macro(miopenGetTensorDescriptorSize)                   \
   __macro(miopenPoolingForward)                            \
@@ -167,7 +168,25 @@ static port::ThreadPool* GetROCmThreadpool() {
   __macro(miopenConvolutionBackwardWeightsGetWorkSpaceSize)\
   __macro(miopenFindConvolutionBackwardDataAlgorithm)      \
   __macro(miopenFindConvolutionBackwardWeightsAlgorithm)   \
-  __macro(miopenConvolutionBackwardDataGetWorkSpaceSize)
+  __macro(miopenConvolutionBackwardDataGetWorkSpaceSize)   \
+  __macro(miopenCreateRNNDescriptor)                       \
+  __macro(miopenSetRNNDescriptor)                          \
+  __macro(miopenDestroyRNNDescriptor)                      \
+  __macro(miopenGetRNNParamsSize)                          \
+  __macro(miopenGetRNNLayerParam)                          \
+  __macro(miopenGetRNNLayerBias)                           \
+  __macro(miopenGetRNNWorkspaceSize)                       \
+  __macro(miopenGetRNNTrainingReserveSize)                 \
+  __macro(miopenRNNForwardInference)                       \
+  __macro(miopenRNNForwardTraining)                        \
+  __macro(miopenRNNBackwardData)                           \
+  __macro(miopenRNNBackwardWeights)                        \
+  __macro(miopenGetRNNLayerParamOffset)                    \
+  __macro(miopenGetRNNLayerParamSize)                      \
+  __macro(miopenGetRNNLayerBiasOffset)                     \
+  __macro(miopenGetRNNLayerBiasSize)                       \
+  __macro(miopenGetRNNParamsDescriptor)                     
+    
 // clang-format on
 
 MIOPEN_DNN_ROUTINE_EACH(PERFTOOLS_GPUTOOLS_MIOPEN_WRAP)
@@ -580,6 +599,56 @@ miopenDataType_t ToMIOpenDataType(
   }
 }
 
+miopenRNNInputMode_t ToMIOpenRnnInputMode(dnn::RnnInputMode input_mode) {
+  switch (input_mode) {
+    case dnn::RnnInputMode::kRnnLinearSkip:
+        return miopenRNNlinear;
+    case dnn::RnnInputMode::kRnnSkipInput:
+        return miopenRNNskip;
+    default:
+      LOG(FATAL) << "Invalid RNN input mode: " << static_cast<int>(input_mode);
+  }
+}
+
+miopenRNNDirectionMode_t ToMIOpenRnnDirectionMode(
+    dnn::RnnDirectionMode direction_mode) {
+  switch (direction_mode) {
+    case dnn::RnnDirectionMode::kRnnUnidirectional:
+        return miopenRNNunidirection;
+    case dnn::RnnDirectionMode::kRnnBidirectional:
+        return miopenRNNbidirection;
+    default:
+      LOG(FATAL) << "Invalid RNN direction mode: "
+                 << static_cast<int>(direction_mode);
+  }
+}
+
+miopenRNNMode_t ToMIOpenRnnMode(dnn::RnnMode rnn_mode) {
+  switch (rnn_mode) {
+    case dnn::RnnMode::kRnnRelu:
+        return miopenRNNRELU;
+    case dnn::RnnMode::kRnnTanh:
+        return miopenRNNTANH;
+    case dnn::RnnMode::kRnnLstm:
+        return miopenLSTM;
+    case dnn::RnnMode::kRnnGru:
+        return miopenGRU;
+    default:
+      LOG(FATAL) << "Invalid RNN Mode: " << static_cast<int>(rnn_mode);
+  }
+}    
+
+int MIOpenDataTypeToByteSize(miopenDataType_t data_type) {
+  switch (data_type) {
+    case miopenFloat:
+      return sizeof(float);
+    case miopenHalf:
+      return sizeof(Eigen::half);
+    default:
+      LOG(FATAL) << "Invalid DNN data type: " << static_cast<int>(data_type);
+  }
+}
+    
 template <typename Base>
 class MixinBase : public Base {};
 template <>
@@ -587,6 +656,743 @@ class MixinBase<void> {};
 
 }  // namespace
 
+
+#define ROCM_RETURN_IF_FAIL(STATUS, ...)                                 \
+  if (!SE_PREDICT_TRUE((STATUS) == miopenStatusSuccess)) {               \
+    string error_msg = port::StrCat(ToString(STATUS), " ", __VA_ARGS__); \
+    SetFailure(port::Status(port::error::UNKNOWN, error_msg));           \
+    LOG(ERROR) << error_msg;                                             \
+    return;                                                              \
+  }
+
+template <typename Base>
+class MIOpenDescriptorCommon : public MixinBase<Base> {
+ public:
+  bool ok() const { return status_.ok(); }
+  port::Status Status() const { return status_; }
+
+ protected:
+  void SetFailure(const port::Status& status) { status_.Update(status); }
+  port::Status status_;
+};
+
+class MIOpenRnnParamsDescriptor : public MIOpenDescriptorCommon<void> {
+ public:
+  typedef dnn::RnnDescriptor::ParamsRegion ParamsRegion;
+  typedef dnn::RnnDescriptor::ParamsRegions ParamsRegions;
+  MIOpenRnnParamsDescriptor(ROCMExecutor* parent, miopenHandle_t miopen_handle,
+                           const MIOpenRnnDescriptor& rnn_desc);
+  ~MIOpenRnnParamsDescriptor() {
+    miopenStatus_t status = wrap::miopenDestroyTensorDescriptor(parent_, handle_);
+    ROCM_RETURN_IF_FAIL(status, "Failed to destroy RNN tensor descriptor");
+  }
+  miopenTensorDescriptor_t handle() const {
+    if (!ok()) return nullptr;
+    return handle_;
+  }
+  int64 params_size_in_bytes() const { return params_size_in_bytes_; }
+  ParamsRegions params_weights() const {
+    if (!ok()) return ParamsRegions();
+    return weights_;
+  }
+  ParamsRegions params_biases() const {
+    if (!ok()) return ParamsRegions();
+    return biases_;
+  }
+
+ private:
+  int GetRegionCountPerLayer() const;
+  ROCMExecutor* parent_;
+  miopenTensorDescriptor_t handle_;
+  const MIOpenRnnDescriptor * rnn_desc_;
+  int64 params_size_in_bytes_;
+  ParamsRegions weights_;
+  ParamsRegions biases_;
+  port::Status status_;
+  SE_DISALLOW_COPY_AND_ASSIGN(MIOpenRnnParamsDescriptor);
+};
+
+class MIOpenRnnDescriptor : public MIOpenDescriptorCommon<dnn::RnnDescriptor> {
+ public:
+  MIOpenRnnDescriptor(ROCMExecutor* parent, miopenHandle_t miopen_handle,
+                     int num_layers, int hidden_size, int input_size,
+                     miopenRNNInputMode_t input_mode,
+                     miopenRNNDirectionMode_t direction_mode,
+                     miopenRNNMode_t rnn_mode, miopenDataType_t data_type,
+                     float dropout, uint64 seed,
+                     ScratchAllocator* state_allocator)
+      : parent_(parent),
+        rnn_desc_(nullptr),
+        num_layers_(num_layers),
+        hidden_size_(hidden_size),
+        input_size_(input_size),
+        input_mode_(input_mode),
+        direction_mode_(direction_mode),
+        rnn_mode_(rnn_mode),
+        data_type_(data_type) {
+#if 0      
+    // no dropout support in MIOpen currently. Create the dropout handle.
+    miopen_dropout_desc_.reset(new miopenDropoutDescriptor(
+        parent, miopen_handle, dropout, seed, state_allocator));
+    if (!miopen_dropout_desc_->ok()) {
+      SetFailure(miopen_dropout_desc_->Status());
+      return;
+    }
+#endif    
+
+    // Create the RNN handle
+    miopenStatus_t status = wrap::miopenCreateRNNDescriptor(parent_, &rnn_desc_);
+    ROCM_RETURN_IF_FAIL(status, "Unable to create RNN descriptor");
+    status = wrap::miopenSetRNNDescriptor(
+        parent, rnn_desc_ /*rnnDesc*/, hidden_size /*hiddenSize*/,
+        num_layers /*numLayers*/, input_mode /*inputMode*/,
+        direction_mode /*direction*/, rnn_mode /*mode*/,
+        miopenRNNwithBias /*biasMode*/, miopenRNNdefault /*algo*/,
+        data_type /*dataType*/);
+    ROCM_RETURN_IF_FAIL(status, "Unable to update RNN descriptor");
+    // Create the params handle.
+    miopen_params_desc_.reset(
+        new MIOpenRnnParamsDescriptor(parent, miopen_handle, *this));
+    if (!miopen_params_desc_->ok()) {
+      SetFailure(miopen_params_desc_->Status());
+      return;
+    }
+  }
+  ~MIOpenRnnDescriptor() override {
+    if (rnn_desc_) {
+      miopenStatus_t status =
+          wrap::miopenDestroyRNNDescriptor(parent_, rnn_desc_);
+      ROCM_RETURN_IF_FAIL(status, "Unable to destroy RNN descriptor");
+    }
+  }
+  miopenRNNDescriptor_t handle() const {
+    if (!ok()) return nullptr;
+    return rnn_desc_;
+  }
+  int num_layers() const { return num_layers_; }
+  int hidden_size() const { return hidden_size_; }
+  int input_size() const { return input_size_; }
+  miopenRNNInputMode_t input_mode() const { return input_mode_; }
+  miopenRNNDirectionMode_t direction_mode() const { return direction_mode_; }
+  miopenRNNMode_t rnn_mode() const { return rnn_mode_; }
+  miopenDataType_t data_type() const { return data_type_; }
+  int64 ParamsSizeInBytes() const override {
+    return miopen_params_desc_->params_size_in_bytes();
+  }
+  miopenTensorDescriptor_t params_handle() const {
+    if (!miopen_params_desc_) return nullptr;
+    return miopen_params_desc_->handle();
+  }
+  ParamsRegions ParamsWeightRegions() const override {
+    if (!ok()) return ParamsRegions();
+    return miopen_params_desc_->params_weights();
+  }
+  ParamsRegions ParamsBiasRegions() const override {
+    if (!ok()) return ParamsRegions();
+    return miopen_params_desc_->params_biases();
+  }
+
+ private:
+  ROCMExecutor* parent_;
+  miopenRNNDescriptor_t rnn_desc_;
+  int num_layers_;
+  int hidden_size_;
+  int input_size_;
+  miopenRNNInputMode_t input_mode_;
+  miopenRNNDirectionMode_t direction_mode_;
+  miopenRNNMode_t rnn_mode_;
+  miopenDataType_t data_type_;
+  port::Status status_;
+  // no dropout in MIOpen.
+  // std::unique_ptr<miopenDropoutDescriptor> miopen_dropout_desc_;
+  std::unique_ptr<MIOpenRnnParamsDescriptor> miopen_params_desc_;
+  SE_DISALLOW_COPY_AND_ASSIGN(MIOpenRnnDescriptor);
+};
+
+// Get ID of the internal parameter tensor.
+//    
+int MIOpenRnnParamsDescriptor::GetRegionCountPerLayer() const {
+  auto rnn_mode = rnn_desc_->rnn_mode();
+  switch (rnn_mode) {
+    case miopenRNNRELU:
+    case miopenRNNTANH:
+      return 2;
+    case miopenLSTM:
+      return 8;
+    case miopenGRU:
+      return 6;
+    default:
+      LOG(FATAL) << "Invalid RNN Mode: " << static_cast<int>(rnn_mode);
+  }
+}
+
+class MIOpenRnnSequenceTensorDescriptor
+    : public MIOpenDescriptorCommon<dnn::RnnSequenceTensorDescriptor> {
+ public:
+  MIOpenRnnSequenceTensorDescriptor(ROCMExecutor* parent, int seq_length,
+                                   int batch_size, int data_size,
+                                   miopenDataType_t data_type)
+      : parent_(parent),
+        seq_length_(seq_length),
+        batch_size_(batch_size),
+        data_size_(data_size),
+        data_type_(data_type) {
+    miopenTensorDescriptor_t handle = nullptr;
+    if (seq_length <= 0) {
+      string error_msg =
+          port::StrCat("sequence length must be positive: ", seq_length);
+      LOG(ERROR) << error_msg;
+      SetFailure(port::Status(port::error::UNKNOWN, error_msg));
+      return;
+    }
+    miopenStatus_t status = wrap::miopenCreateTensorDescriptor(parent, &handle);
+    ROCM_RETURN_IF_FAIL(status, "Failed to create tensor descriptor");
+    std::array<int, 2> dims = {{batch_size, data_size}};
+    status = wrap::miopenSetTensorDescriptor(
+        parent, handle /*tensorDesc*/, data_type /*dataType*/,
+        2 /*nbDims*/, dims.data() /*dimA*/,
+        nullptr /*strideA*/);
+    ROCM_RETURN_IF_FAIL(status, "Failed to update tensor descriptor");
+    // Replicate handle across the number of steps.
+    handles_.assign(seq_length, handle);
+  }
+
+  ~MIOpenRnnSequenceTensorDescriptor() override {
+    // Only the first one needs to be destroyed. All others are the same.
+    miopenStatus_t status =
+        wrap::miopenDestroyTensorDescriptor(parent_, handles_[0]);
+    ROCM_RETURN_IF_FAIL(status,
+                         "Failed to destroy sequence tensor descriptor");
+  }
+
+  const miopenTensorDescriptor_t* handles() const {
+    if (!ok()) return nullptr;
+    CHECK(!handles_.empty()) << "handles cannot be empty";
+    return handles_.data();
+  }
+
+  int seq_length() const { return seq_length_; }
+  int batch_size() const { return batch_size_; }
+  int data_size() const { return data_size_; }
+
+ private:
+  ROCMExecutor* parent_;
+  int seq_length_;
+  int batch_size_;
+  int data_size_;
+  miopenDataType_t data_type_;
+  std::vector<miopenTensorDescriptor_t> handles_;
+  port::Status status_;
+  SE_DISALLOW_COPY_AND_ASSIGN(MIOpenRnnSequenceTensorDescriptor);
+};
+
+class MIOpenRnnStateTensorDescriptor
+    : public MIOpenDescriptorCommon<dnn::RnnStateTensorDescriptor> {
+ public:
+  MIOpenRnnStateTensorDescriptor(ROCMExecutor* parent, int num_layers,
+                                int batch_size, int data_size,
+                                miopenDataType_t data_type)
+      : parent_(parent),
+        handle_(nullptr),
+        num_layers_(num_layers),
+        batch_size_(batch_size),
+        data_size_(data_size),
+        data_type_(data_type) {
+    miopenStatus_t status = wrap::miopenCreateTensorDescriptor(parent, &handle_);
+    ROCM_RETURN_IF_FAIL(status, "Failed to create tensor descriptor");
+    std::array<int, 3> dims = {{num_layers, batch_size, data_size}};
+    status = wrap::miopenSetTensorDescriptor(
+        parent, handle_ /*tensorDesc*/, data_type /*dataType*/,
+        3 /*nbDims*/, dims.data() /*dimA*/,
+        nullptr /*strideA*/);
+    ROCM_RETURN_IF_FAIL(status, "Failed to update tensor descriptor");
+  }
+
+  ~MIOpenRnnStateTensorDescriptor() override {
+    if (!handle_) {
+      miopenStatus_t status =
+          wrap::miopenDestroyTensorDescriptor(parent_, handle_);
+      ROCM_RETURN_IF_FAIL(status, "Unable to destroy RNN state tensor");
+    }
+  }
+
+  miopenTensorDescriptor_t handle() const {
+    if (!ok()) return nullptr;
+    return handle_;
+  }
+  int num_layers() const { return num_layers_; }
+  int batch_size() const { return batch_size_; }
+  int data_size() const { return data_size_; }
+
+ private:
+  ROCMExecutor* parent_;
+  miopenTensorDescriptor_t handle_;
+  int num_layers_;
+  int batch_size_;
+  int data_size_;
+  port::Status status_;
+  miopenDataType_t data_type_;
+  SE_DISALLOW_COPY_AND_ASSIGN(MIOpenRnnStateTensorDescriptor);
+};
+
+namespace {
+
+struct RnnModelDims {
+  int num_layers = 0;
+  int batch_size = 0;
+  int seq_length = 0;
+  int hidden_size = 0;
+  int input_size = 0;
+  int dir_count = 0;
+};
+
+template <class T>    
+bool ExtractAndCheckRnnForward(
+    const MIOpenRnnDescriptor& rnn_desc,
+    const MIOpenRnnSequenceTensorDescriptor& input_desc,
+    const DeviceMemory<T>& input_data,
+    const MIOpenRnnStateTensorDescriptor& input_h_desc,
+    const DeviceMemory<T>& input_h_data,
+    const MIOpenRnnStateTensorDescriptor& input_c_desc,
+    const DeviceMemory<T>& input_c_data, const DeviceMemory<T>& params,
+    const MIOpenRnnSequenceTensorDescriptor& output_desc,
+    const DeviceMemory<T>& output_data,
+    const MIOpenRnnStateTensorDescriptor& output_h_desc,
+    const DeviceMemory<T>& output_h_data,
+    const MIOpenRnnStateTensorDescriptor& output_c_desc,
+    const DeviceMemory<T>& output_c_data, RnnModelDims* model_dims) {
+  // extract model parameters
+  model_dims->num_layers = rnn_desc.num_layers();
+  model_dims->batch_size = input_desc.batch_size();
+  model_dims->seq_length = input_desc.seq_length();
+  model_dims->hidden_size = rnn_desc.hidden_size();
+  model_dims->input_size = input_desc.data_size();
+  model_dims->dir_count =
+      (rnn_desc.direction_mode() == miopenRNNbidirection) ? 2 : 1;
+
+  // check parameters
+  if (!(input_h_desc.num_layers() ==
+            model_dims->num_layers * model_dims->dir_count &&
+        input_h_desc.batch_size() == model_dims->batch_size &&
+        input_h_desc.data_size() == model_dims->hidden_size)) {
+    LOG(ERROR) << "Invalid input_h shape";
+    return false;
+  }
+  if (!(input_h_desc.num_layers() == input_c_desc.num_layers() &&
+        input_h_desc.batch_size() == input_c_desc.batch_size() &&
+        input_h_desc.data_size() == input_c_desc.data_size())) {
+    LOG(ERROR) << "Invalid input_c shape";
+    return false;
+  }
+  if (!(output_desc.seq_length() == model_dims->seq_length &&
+        output_desc.batch_size() == model_dims->batch_size &&
+        output_desc.data_size() ==
+            model_dims->hidden_size * model_dims->dir_count)) {
+    LOG(ERROR) << "Invalid output shape";
+    return false;
+  }
+  if (!(input_h_desc.num_layers() == output_h_desc.num_layers() &&
+        input_h_desc.batch_size() == output_h_desc.batch_size() &&
+        input_h_desc.data_size() == output_h_desc.data_size())) {
+    LOG(ERROR) << "Invalid output_h shape";
+    return false;
+  }
+  if (!(input_h_desc.num_layers() == output_c_desc.num_layers() &&
+        input_h_desc.batch_size() == output_c_desc.batch_size() &&
+        input_h_desc.data_size() == output_c_desc.data_size())) {
+    LOG(ERROR) << "Invalid output_h shape";
+    return false;
+  }
+
+  return true;
+}
+
+bool CheckRNNParameterSize(ROCMExecutor* parent, miopenHandle_t miopen_handle,
+                           const MIOpenRnnDescriptor& rnn_desc,
+                           const MIOpenRnnSequenceTensorDescriptor& input_desc) {
+  size_t params_size_in_bytes = 0;
+  miopenStatus_t status = wrap::miopenGetRNNParamsSize(
+      parent, miopen_handle /*handle*/, rnn_desc.handle() /*rnnDesc*/,
+      input_desc.handles()[0] /*xDesc*/, &params_size_in_bytes /*sizeInBytes*/,
+      rnn_desc.data_type() /*dataType*/);
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "Unable to check RNN param size: " << ToString(status);
+    return false;
+  }
+  return static_cast<int64>(params_size_in_bytes) ==
+         rnn_desc.ParamsSizeInBytes();
+}
+
+bool CreateRnnWorkspace(Stream* stream, ROCMExecutor* parent,
+                        miopenHandle_t miopen_handle,
+                        const MIOpenRnnDescriptor& rnn_desc,
+                        const MIOpenRnnSequenceTensorDescriptor& input_desc,
+                        ScratchAllocator* workspace_allocator,
+                        DeviceMemory<uint8>* workspace) {
+  // Query the workspace size.
+  size_t workspace_size_in_bytes = 0;
+  miopenStatus_t status = wrap::miopenGetRNNWorkspaceSize(
+      parent, miopen_handle /*handle*/, rnn_desc.handle() /*rnnDesc*/,
+      input_desc.seq_length() /*seqLength*/, input_desc.handles() /*xDesc*/,
+      &workspace_size_in_bytes /*sizeInBytes*/);
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "Unable to query workspace size: " << ToString(status);
+    return false;
+  }
+  // Allocate the workspace.
+  if (workspace_size_in_bytes > 0) {
+    auto allocated =
+        workspace_allocator->AllocateBytes(stream, workspace_size_in_bytes);
+    if (!allocated.ok() || (*workspace = allocated.ValueOrDie()) == nullptr) {
+      LOG(ERROR) << "Failed to allocate RNN workspace";
+    
+      return false;
+    }
+    stream->ThenMemZero(workspace, workspace_size_in_bytes);
+  } else {
+    *workspace = DeviceMemory<uint8>();
+  }
+  return true;
+}
+    
+} // namespace
+
+template <class T>
+bool MIOpenSupport::DoRnnForwardImpl(
+    Stream* stream, const MIOpenRnnDescriptor& rnn_desc,
+    const MIOpenRnnSequenceTensorDescriptor& input_desc,
+    const DeviceMemory<T>& input_data,
+    const MIOpenRnnStateTensorDescriptor& input_h_desc,
+    const DeviceMemory<T>& input_h_data,
+    const MIOpenRnnStateTensorDescriptor& input_c_desc,
+    const DeviceMemory<T>& input_c_data, const DeviceMemory<T>& params,
+    const MIOpenRnnSequenceTensorDescriptor& output_desc,
+    DeviceMemory<T>* output_data,
+    const MIOpenRnnStateTensorDescriptor& output_h_desc,
+    DeviceMemory<T>* output_h_data,
+    const MIOpenRnnStateTensorDescriptor& output_c_desc,
+    DeviceMemory<T>* output_c_data, bool is_training,
+    ScratchAllocator* reserve_space_allocator,
+    ScratchAllocator* workspace_allocator) {
+  // extract model parameters
+  RnnModelDims model_dims;
+  bool res = ExtractAndCheckRnnForward(
+      rnn_desc, input_desc, input_data, input_h_desc, input_h_data,
+      input_c_desc, input_c_data, params, output_desc, *output_data,
+      output_h_desc, *output_h_data, output_c_desc, *output_c_data,
+      &model_dims);
+  if (!res) {
+    LOG(ERROR) << "Invalid parameters for RNN Model";
+    return false;
+  }
+
+  // check params size
+  mutex_lock lock{dnn_handle_mutex_};
+
+  if (!CheckRNNParameterSize(parent_, ToHandle(dnn_handle_), rnn_desc,
+                             input_desc)) {
+    LOG(ERROR) << "Invalid parameters";
+    return false;
+  }
+
+  // create the workspace
+  DeviceMemory<uint8> workspace;
+  if (!CreateRnnWorkspace(stream, parent_, ToHandle(dnn_handle_), rnn_desc,
+                          input_desc, workspace_allocator, &workspace)) {
+    LOG(ERROR) << "Unable to create rnn workspace";
+
+    return false;
+  }
+
+  // query the reserve space size
+  // allocate the reserve space
+  DeviceMemory<uint8> reserve_space;
+  if (is_training) {
+    size_t reserve_space_size_in_bytes = 0;
+    miopenStatus_t status = wrap::miopenGetRNNTrainingReserveSize(
+        parent_, ToHandle(dnn_handle_) /*handle*/,
+        rnn_desc.handle() /*rnnDesc*/, model_dims.seq_length /*seqLength*/,
+        input_desc.handles() /*xDesc*/,
+        &reserve_space_size_in_bytes /*sizeInBytes*/);
+    if (status != miopenStatusSuccess) {
+      LOG(ERROR) << "Unable to query reserve space size: " << ToString(status);
+      return false;
+    }
+
+    if (reserve_space_size_in_bytes > 0) {
+      auto allocated = reserve_space_allocator->AllocateBytes(
+          stream, reserve_space_size_in_bytes);
+      if (!allocated.ok() ||
+          (reserve_space = allocated.ValueOrDie()) == nullptr) {
+        LOG(ERROR) << "Fail to allocate RNN reserve space";
+        return false;
+      }
+      stream->ThenMemZero(&reserve_space, reserve_space_size_in_bytes);
+    }
+  }
+
+  // make the forward call
+  if (!is_training) {
+    miopenStatus_t status = wrap::miopenRNNForwardInference(
+        parent_, ToHandle(dnn_handle_) /*handle*/,
+        rnn_desc.handle() /*rnnDesc*/, model_dims.seq_length /*seqLength*/,
+        input_desc.handles() /*xDesc*/, input_data.opaque() /*x*/,
+        input_h_desc.handle() /*hxDesc*/, input_h_data.opaque() /*hx*/,
+        input_c_desc.handle() /*cxDesc*/, input_c_data.opaque() /*cx*/,
+        rnn_desc.params_handle() /*wDesc*/, params.opaque() /*w*/,
+        output_desc.handles() /*yDesc*/, output_data->opaque() /*y*/,
+        output_h_desc.handle() /*hyDesc*/, output_h_data->opaque() /*hy*/,
+        output_c_desc.handle() /*cyDesc*/, output_c_data->opaque() /*cy*/,
+        workspace.opaque() /*workspace*/,
+        workspace.size() /*workSpaceSizeInBytes*/);
+    
+    if (status != miopenStatusSuccess) {
+      LOG(ERROR) << "Failed to call miopenRNNForwardInference: "
+                 << ToString(status);
+      return false;
+    }
+  } else {
+    miopenStatus_t status = wrap::miopenRNNForwardTraining(
+        parent_, ToHandle(dnn_handle_) /*handle*/,
+        rnn_desc.handle() /*rnnDesc*/, model_dims.seq_length /*seqLength*/,
+        input_desc.handles() /*xDesc*/, input_data.opaque() /*x*/,
+        input_h_desc.handle() /*hxDesc*/, input_h_data.opaque() /*hx*/,
+        input_c_desc.handle() /*cxDesc*/, input_c_data.opaque() /*cx*/,
+        rnn_desc.params_handle() /*wDesc*/, params.opaque() /*w*/,
+        output_desc.handles() /*yDesc*/, output_data->opaque() /*y*/,
+        output_h_desc.handle() /*hyDesc*/, output_h_data->opaque() /*hy*/,
+        output_c_desc.handle() /*cyDesc*/, output_c_data->opaque() /*cy*/,
+        workspace.opaque() /*workspace*/,
+        workspace.size() /*workSpaceSizeInBytes*/,
+        reserve_space.opaque() /*reserveSpace*/,
+        reserve_space.size() /*reserveSpaceSizeInBytes*/);
+    if (status != miopenStatusSuccess) {
+      LOG(ERROR) << "Failed to call miopenRNNForwardTraining"
+                 << ToString(status);
+      return false;
+    }
+  }
+  return true;
+}
+
+template <class T>
+bool MIOpenSupport::DoRnnBackwardImpl(
+    Stream* stream, const MIOpenRnnDescriptor& rnn_desc,
+    const MIOpenRnnSequenceTensorDescriptor& input_desc,
+    const DeviceMemory<T>& input_data,
+    const MIOpenRnnStateTensorDescriptor& input_h_desc,
+    const DeviceMemory<T>& input_h_data,
+    const MIOpenRnnStateTensorDescriptor& input_c_desc,
+    const DeviceMemory<T>& input_c_data, const DeviceMemory<T>& params,
+    const MIOpenRnnSequenceTensorDescriptor& output_desc,
+    const DeviceMemory<T>& output_data,
+    const MIOpenRnnStateTensorDescriptor& output_h_desc,
+    const DeviceMemory<T>& output_h_data,
+    const MIOpenRnnStateTensorDescriptor& output_c_desc,
+    const DeviceMemory<T>& output_c_data,
+    const DeviceMemory<float>& output_backprop_data,
+    const DeviceMemory<float>& output_h_backprop_data,
+    const DeviceMemory<float>& output_c_backprop_data,
+    DeviceMemory<float>* input_backprop_data,
+    DeviceMemory<float>* input_h_backprop_data,
+    DeviceMemory<float>* input_c_backprop_data,
+    DeviceMemory<float>* params_backprop_data,
+    DeviceMemory<uint8>* reserve_space_data,
+    ScratchAllocator* workspace_allocator) {
+    
+  // extract model parameters
+  RnnModelDims model_dims;
+  bool res = ExtractAndCheckRnnForward(
+      rnn_desc, input_desc, input_data, input_h_desc, input_h_data,
+      input_c_desc, input_c_data, params, output_desc, output_data,
+      output_h_desc, output_h_data, output_c_desc, output_c_data, &model_dims);
+  if (!res) {
+    LOG(ERROR) << "Invalid parameters for RNN Model";
+    return false;
+  }
+
+  // check params size
+  mutex_lock lock{dnn_handle_mutex_};
+
+  if (!CheckRNNParameterSize(parent_, ToHandle(dnn_handle_), rnn_desc,
+                             input_desc)) {
+    LOG(ERROR) << "Invalid parameters";
+    return false;
+  }
+
+  // create the workspace
+  DeviceMemory<uint8> workspace;
+  if (!CreateRnnWorkspace(stream, parent_, ToHandle(dnn_handle_), rnn_desc,
+                          input_desc, workspace_allocator, &workspace)) {
+    LOG(ERROR) << "Unable to create rnn workspace";
+    return false;
+  }
+
+  // workaround for missing initialization support in MIOpen.
+  // TODO: remove this when MIOpen is ready.
+  long size_data = input_desc.seq_length()*input_desc.batch_size() * input_desc.data_size(); 
+  if ((size_data > 0) && (input_backprop_data->opaque() != nullptr))
+      stream->ThenMemZero(input_backprop_data, size_data * sizeof(float));
+
+  size_data = input_h_desc.num_layers()*input_h_desc.batch_size()*input_h_desc.data_size();
+  if ((size_data > 0) && (input_h_backprop_data->opaque() != nullptr))
+      stream->ThenMemZero(input_h_backprop_data, size_data * sizeof(float));
+
+  size_data = input_c_desc.num_layers()*input_c_desc.batch_size()*input_c_desc.data_size();
+  if ((size_data > 0) && (input_c_backprop_data->opaque() != nullptr))
+      stream->ThenMemZero(input_c_backprop_data, size_data * sizeof(float));
+  
+  // make the backward data call
+  miopenStatus_t status = wrap::miopenRNNBackwardData(
+      parent_, ToHandle(dnn_handle_) /*handle*/, rnn_desc.handle() /*rnnDesc*/,
+      model_dims.seq_length /*seqLength*/, output_desc.handles() /*yDesc*/,
+      output_data.opaque() /*y*/, output_desc.handles() /*dyDesc*/,
+      output_backprop_data.opaque() /*dy*/, output_h_desc.handle() /*dhyDesc*/,
+      output_h_backprop_data.opaque() /*dhy*/,
+      output_c_desc.handle() /*dcyDesc*/,
+      output_c_backprop_data.opaque() /*dcy*/,
+      rnn_desc.params_handle() /*wDesc*/, params.opaque() /*w*/,
+      input_h_desc.handle() /*hxDesc*/, input_h_data.opaque() /*hx*/,
+      input_c_desc.handle() /*cxDesc*/, input_c_data.opaque() /*cx*/,
+      input_desc.handles() /*dxDesc*/, input_backprop_data->opaque() /*dx*/,
+      input_h_desc.handle() /*dhxDesc*/,
+      input_h_backprop_data->opaque() /*dhx*/,
+      input_c_desc.handle() /*dcxDesc*/,
+      input_c_backprop_data->opaque() /*dcx*/, workspace.opaque() /*workspace*/,
+      workspace.size() /*workSpaceSizeInBytes*/,
+      reserve_space_data->opaque() /*reserveSpace*/,
+      reserve_space_data->size() /*reserveSpaceSizeInBytes*/);
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "Failed to call miopenRNNBackwardData: " << ToString(status);
+    return false;
+  }
+
+  if (params_backprop_data != nullptr) {
+    // Clear the dw to zeros.
+    stream->ThenMemZero(params_backprop_data, params_backprop_data->size());
+    // make the backward weight call
+    status = wrap::miopenRNNBackwardWeights(
+        parent_, ToHandle(dnn_handle_) /*handle*/,
+        rnn_desc.handle() /*rnnDesc*/, model_dims.seq_length /*seqLength*/,
+        input_desc.handles() /*xDesc*/, input_data.opaque() /*x*/,
+        input_h_desc.handle() /*hxDesc*/, input_h_data.opaque() /*hx*/,
+        output_desc.handles() /*yDesc*/, output_data.opaque() /*y*/,
+        rnn_desc.params_handle() /*dwDesc*/,
+        params_backprop_data->opaque() /*dw*/,
+        workspace.opaque() /*workspace*/,
+        workspace.size() /*workSpaceSizeInBytes*/,
+        reserve_space_data->opaque() /*reserveSpace*/,
+        reserve_space_data->size() /*reserveSpaceSizeInBytes*/);
+    if (status != miopenStatusSuccess) {
+      LOG(ERROR) << "Failed to call miopenRNNBackwardWeights: "
+                 << ToString(status);
+      return false;
+    }
+  }
+
+  return true;
+}    
+
+MIOpenRnnParamsDescriptor::MIOpenRnnParamsDescriptor(
+    ROCMExecutor* parent, miopenHandle_t miopen_handle,
+    const MIOpenRnnDescriptor& rnn_desc)
+    : parent_(parent),
+      handle_(nullptr),
+      rnn_desc_(&rnn_desc),
+      params_size_in_bytes_(0) {
+  miopenTensorDescriptor_t input_desc = nullptr;
+  {
+    // Query the params size.
+    auto status = wrap::miopenCreateTensorDescriptor(parent, &input_desc);
+    ROCM_RETURN_IF_FAIL(status, "MIOpen fails to create tensor descriptor");
+    std::array<int, 2> dims = {{1, rnn_desc.input_size()}};
+    status = wrap::miopenSetTensorDescriptor(
+        parent, input_desc /*tensorDesc*/, rnn_desc.data_type() /*dataType*/,
+        2 /*nbDims*/, dims.data() /*dimA*/,
+        nullptr /*strideA*/);
+    ROCM_RETURN_IF_FAIL(status, "MIOpen fails to set tensor descriptor");
+
+    size_t params_size = 0;
+    status = wrap::miopenGetRNNParamsSize(
+        parent, miopen_handle /*handle*/, rnn_desc.handle() /*rnnDesc*/,
+        input_desc /*xDesc*/, &params_size /*sizeInBytes*/,
+        rnn_desc.data_type() /*dataType*/);
+    ROCM_RETURN_IF_FAIL(status, "MIOpen fails to get RNN parameter size");
+    params_size_in_bytes_ = static_cast<int64>(params_size);
+  }
+
+  {
+    // Create the params descriptor.
+    auto status = wrap::miopenCreateTensorDescriptor(parent, &handle_);
+    ROCM_RETURN_IF_FAIL(status, "MIOpen fails to create RNN params descriptor");
+    status = wrap::miopenGetRNNParamsDescriptor(parent, miopen_handle, rnn_desc.handle(), input_desc, handle_, rnn_desc.data_type());
+    ROCM_RETURN_IF_FAIL(status, "MIOpen fails to update RNN filter descriptor");
+  }
+#if 0
+  {
+    // TODO: The following is for save and restore parameter ops from "saver"
+    // class.  Currently, "_handle" gets overwritten by MIOpen API, which is undesirable.
+    // Create the weights and biases into the params buffer
+    int region_count_per_layer = GetRegionCountPerLayer();
+    miopenTensorDescriptor_t region_desc_handle = nullptr;
+    auto status =
+        wrap::miopenCreateTensorDescriptor(parent, &region_desc_handle);
+    ROCM_RETURN_IF_FAIL(status, "MIOpen fails to create filter descriptor");
+    for (int layer = 0; layer < rnn_desc.num_layers(); layer++) {
+      for (int region = 0; region < region_count_per_layer; region++) {
+        for (int type = 0; type < 2; type++) {
+          size_t offset = 0;
+          size_t size = 0;
+          if (type == 0) {
+            status = wrap::miopenGetRNNLayerParamOffset(
+                parent, rnn_desc.handle() /*rnnDesc*/,
+                layer /*layer*/, input_desc /*xDesc*/,
+                region /*paramID*/, handle_ /*wDesc*/,
+                &offset /*layerParamOffset*/);
+            ROCM_RETURN_IF_FAIL(
+                status, "MIOpen fails to call miopenGetRNNLayerParamOffset");
+            status = wrap::miopenGetRNNLayerParamSize(
+                parent, miopen_handle /*handle*/,
+                rnn_desc.handle() /*rnnDesc*/, layer /*layer*/,
+                input_desc /*xDesc*/, region /*paramID*/,
+                &size /*numBytes */);
+            ROCM_RETURN_IF_FAIL(
+                status, "MIOpen fails to call miopenGetRNNLayerParamSize");
+          } else {
+            status = wrap::miopenGetRNNLayerBiasOffset(
+                parent, rnn_desc.handle() /*rnnDesc*/,
+                layer /*layer*/, input_desc /*xDesc*/,
+                region /*biasID*/, handle_ /*wDesc*/,
+                &offset /*layerBiasOffset*/);
+            ROCM_RETURN_IF_FAIL(
+                status, "MIOpen fails to call miopenGetRNNLayerBiasOffset");
+            status = wrap::miopenGetRNNLayerBiasSize(
+                parent, miopen_handle /*handle*/,
+                rnn_desc.handle() /*rnnDesc*/, layer /*layer*/,
+                region /*biasID*/,
+                &size /*numBytes */);
+            ROCM_RETURN_IF_FAIL(
+                status, "MIOpen fails to call miopenGetRNNLayerBiasSize");
+          }
+          auto region = ParamsRegion{reinterpret_cast<int64>((int64)offset), (int64) size};
+          if (type == 0) {
+            weights_.push_back(region);
+          } else {
+            biases_.push_back(region);
+          }
+        }
+      }
+    }
+    status = wrap::miopenDestroyTensorDescriptor(parent, region_desc_handle);
+    ROCM_RETURN_IF_FAIL(status, "MIOpen fails to destroy tensor descriptor");
+  }
+#endif
+  {
+    // Release the dummy input tensor descriptor.
+    auto status = wrap::miopenDestroyTensorDescriptor(parent, input_desc);
+    ROCM_RETURN_IF_FAIL(status, "MIOpen fails to destroy tensor descriptor");
+  }
+}
 
 port::StatusOr<std::unique_ptr<dnn::RnnDescriptor>>
 MIOpenSupport::createRnnDescriptor(int num_layers, int hidden_size,
@@ -596,30 +1402,47 @@ MIOpenSupport::createRnnDescriptor(int num_layers, int hidden_size,
                                   dnn::DataType data_type, float dropout,
                                   uint64 seed,
                                   ScratchAllocator* state_allocator) {
-  string error_msg =
-      port::StrCat("createRnnDescriptor not supported yet");
-  LOG(ERROR) << error_msg;
-  return port::Status{port::error::UNIMPLEMENTED, error_msg};
+  mutex_lock lock{dnn_handle_mutex_};
+  std::unique_ptr<MIOpenRnnDescriptor> rnn_desc(new MIOpenRnnDescriptor(
+      parent_, ToHandle(dnn_handle_), num_layers, hidden_size, input_size,
+      ToMIOpenRnnInputMode(input_mode),
+      ToMIOpenRnnDirectionMode(direction_mode),
+      ToMIOpenRnnMode(rnn_mode), ToMIOpenDataType(data_type), dropout, seed,
+      state_allocator));
+  if (!rnn_desc->ok()) {
+    return rnn_desc->Status();
+  }
+  return port::StatusOr<std::unique_ptr<dnn::RnnDescriptor>>(
+      std::move(rnn_desc));
 }
 
 port::StatusOr<std::unique_ptr<dnn::RnnSequenceTensorDescriptor>>
 MIOpenSupport::createRnnSequenceTensorDescriptor(int seq_length, int batch_size,
-                                                int data_size,
-                                                dnn::DataType data_type) {
-  string error_msg = port::StrCat(
-      "createRnnSequenceTensorDescriptor not supported yet");
-  LOG(ERROR) << error_msg;
-  return port::Status{port::error::UNIMPLEMENTED, error_msg};
+                                                 int data_size,
+                                                 dnn::DataType data_type) {
+  std::unique_ptr<MIOpenRnnSequenceTensorDescriptor> seq_desc(
+      new MIOpenRnnSequenceTensorDescriptor(parent_, seq_length, batch_size,
+                                            data_size,
+                                            ToMIOpenDataType(data_type)));
+  if (!seq_desc->ok()) {
+    return seq_desc->Status();
+  }
+  return port::StatusOr<std::unique_ptr<dnn::RnnSequenceTensorDescriptor>>(
+      std::move(seq_desc));
 }
 
 port::StatusOr<std::unique_ptr<dnn::RnnStateTensorDescriptor>>
 MIOpenSupport::createRnnStateTensorDescriptor(int num_layer, int batch_size,
                                              int data_size,
                                              dnn::DataType data_type) {
-  string error_msg = port::StrCat(
-      "createRnnStateTensorDescriptor not supported yet");
-  LOG(ERROR) << error_msg;
-  return port::Status{port::error::UNIMPLEMENTED, error_msg};
+  std::unique_ptr<MIOpenRnnStateTensorDescriptor> state_desc(
+      new MIOpenRnnStateTensorDescriptor(parent_, num_layer, batch_size,
+                                        data_size, ToMIOpenDataType(data_type)));
+  if (!state_desc->ok()) {
+    return state_desc->Status();
+  }
+  return port::StatusOr<std::unique_ptr<dnn::RnnStateTensorDescriptor>>(
+      std::move(state_desc));
 }
 
 bool MIOpenSupport::DoRnnForward(
@@ -638,7 +1461,26 @@ bool MIOpenSupport::DoRnnForward(
     DeviceMemory<float>* output_c_data, bool is_training,
     ScratchAllocator* reserve_space_allocator,
     ScratchAllocator* workspace_allocator) {
-  return false;
+  const MIOpenRnnDescriptor& miopen_rnn_desc =
+      static_cast<const MIOpenRnnDescriptor&>(rnn_desc);
+  const MIOpenRnnSequenceTensorDescriptor& miopen_input_desc =
+      static_cast<const MIOpenRnnSequenceTensorDescriptor&>(input_desc);
+  const MIOpenRnnStateTensorDescriptor& miopen_input_h_desc =
+      static_cast<const MIOpenRnnStateTensorDescriptor&>(input_h_desc);
+  const MIOpenRnnStateTensorDescriptor& miopen_input_c_desc =
+      static_cast<const MIOpenRnnStateTensorDescriptor&>(input_c_desc);
+  const MIOpenRnnSequenceTensorDescriptor& miopen_output_desc =
+      static_cast<const MIOpenRnnSequenceTensorDescriptor&>(output_desc);
+  const MIOpenRnnStateTensorDescriptor& miopen_output_h_desc =
+      static_cast<const MIOpenRnnStateTensorDescriptor&>(output_h_desc);
+  const MIOpenRnnStateTensorDescriptor& miopen_output_c_desc =
+      static_cast<const MIOpenRnnStateTensorDescriptor&>(output_c_desc);
+
+  return DoRnnForwardImpl<float>(
+      stream, miopen_rnn_desc, miopen_input_desc, input_data, miopen_input_h_desc,
+      input_h_data, miopen_input_c_desc, input_c_data, params, miopen_output_desc,
+      output_data, miopen_output_h_desc, output_h_data, miopen_output_c_desc,
+      output_c_data, is_training, reserve_space_allocator, workspace_allocator);
 }
 
 bool MIOpenSupport::DoRnnBackward(
@@ -664,7 +1506,29 @@ bool MIOpenSupport::DoRnnBackward(
     DeviceMemory<float>* params_backprop_data,
     DeviceMemory<uint8>* reserve_space_data,
     ScratchAllocator* workspace_allocator) {
-  return false;
+    const MIOpenRnnDescriptor& miopen_rnn_desc =
+        static_cast<const MIOpenRnnDescriptor&>(rnn_desc);
+    const MIOpenRnnSequenceTensorDescriptor& miopen_input_desc =
+        static_cast<const MIOpenRnnSequenceTensorDescriptor&>(input_desc);
+    const MIOpenRnnStateTensorDescriptor& miopen_input_h_desc =
+        static_cast<const MIOpenRnnStateTensorDescriptor&>(input_h_desc);
+    const MIOpenRnnStateTensorDescriptor& miopen_input_c_desc =
+        static_cast<const MIOpenRnnStateTensorDescriptor&>(input_c_desc);
+    const MIOpenRnnSequenceTensorDescriptor& miopen_output_desc =
+        static_cast<const MIOpenRnnSequenceTensorDescriptor&>(output_desc);
+    const MIOpenRnnStateTensorDescriptor& miopen_output_h_desc =
+        static_cast<const MIOpenRnnStateTensorDescriptor&>(output_h_desc);
+    const MIOpenRnnStateTensorDescriptor& miopen_output_c_desc =
+        static_cast<const MIOpenRnnStateTensorDescriptor&>(output_c_desc);
+    
+    return DoRnnBackwardImpl<float>(
+      stream, miopen_rnn_desc, miopen_input_desc, input_data, miopen_input_h_desc,
+      input_h_data, miopen_input_c_desc, input_c_data, params, miopen_output_desc,
+      output_data, miopen_output_h_desc, output_h_data, miopen_output_c_desc,
+      output_c_data, output_backprop_data, output_h_backprop_data,
+      output_c_backprop_data, input_backprop_data, input_h_backprop_data,
+      input_c_backprop_data, params_backprop_data, reserve_space_data,
+      workspace_allocator);
 }
 
 template <class T>
@@ -1067,8 +1931,11 @@ bool MIOpenSupport::DoConvolve(
     DeviceMemory<Eigen::half>* output_data, ScratchAllocator* scratch_allocator,
     const dnn::AlgorithmConfig& algorithm_config,
     dnn::ProfileResult* output_profile_result) {
-  LOG(ERROR) << "miopen does not support halt type yet";
-  return false;
+  return DoConvolveImpl<Eigen::half>(
+      stream, miopenHalf, batch_descriptor, input_data, filter_descriptor,
+      filter_data, convolution_descriptor, biases, activation_mode,
+      output_descriptor, output_data, scratch_allocator, algorithm_config,
+      output_profile_result);
 }
 
 bool MIOpenSupport::DoConvolve(
@@ -1081,8 +1948,11 @@ bool MIOpenSupport::DoConvolve(
     DeviceMemory<Eigen::half>* output_data, ScratchAllocator* scratch_allocator,
     const dnn::AlgorithmConfig& algorithm_config,
     dnn::ProfileResult* output_profile_result) {
-  LOG(ERROR) << "miopen does not support halt type yet";
-  return false;
+  return DoConvolveImpl<Eigen::half>(
+      stream, miopenHalf, batch_descriptor, input_data, filter_descriptor,
+      filter_data, convolution_descriptor, /*biases=*/nullptr,
+      dnn::ActivationMode::kNone, output_descriptor, output_data,
+      scratch_allocator, algorithm_config, output_profile_result);
 }
 
 template<class T>
@@ -1354,8 +2224,11 @@ bool MIOpenSupport::DoConvolveBackwardData(
     ScratchAllocator* scratch_allocator,
     const dnn::AlgorithmConfig& algorithm_config,
     dnn::ProfileResult* output_profile_result) {
-  LOG(ERROR) << "miopen does not support half type yet";
-  return false;
+  return DoConvolveBackwardDataImpl(
+      stream, miopenHalf, filter_descriptor, filter_data,
+      output_descriptor_in, backward_output_data, convolution_descriptor,
+      input_descriptor, backward_input_data, scratch_allocator,
+      algorithm_config, output_profile_result);
 }
 
 template <class T>
@@ -1554,8 +2427,11 @@ bool MIOpenSupport::DoConvolveBackwardFilter(
     ScratchAllocator* scratch_allocator,
     const dnn::AlgorithmConfig& algorithm_config,
     dnn::ProfileResult* output_profile_result) {
-  LOG(ERROR) << "miopen does not support half type yet";
-  return false;
+  return DoConvolveBackwardFilterImpl(
+      stream, miopenHalf, input_descriptor, input_data,
+      output_descriptor_in, backward_output_data, convolution_descriptor,
+      filter_descriptor, backward_filter_data, scratch_allocator,
+      algorithm_config, output_profile_result);
 }
 
 template <class T>
@@ -1618,8 +2494,9 @@ bool MIOpenSupport::DoConvolveBackwardBias(
     const DeviceMemory<Eigen::half>& input_data,
     const BatchDescriptor& bias_descriptor,
     DeviceMemory<Eigen::half>* backward_bias_data) {
-  LOG(ERROR) << "miopen does not support half type yet";
-  return false;
+  return DoConvolveBackwardBiasImpl(stream, miopenHalf, input_descriptor,
+                                    input_data, bias_descriptor,
+                                    backward_bias_data);
 }
 
 bool MIOpenSupport::DoMatMul(Stream* stream,
@@ -1898,8 +2775,56 @@ bool MIOpenSupport::DoPoolForward(
     const dnn::BatchDescriptor& output_dimensions,
     DeviceMemory<Eigen::half>* output_data,
     ScratchAllocator* workspace_allocator) {
-  LOG(ERROR) << "miopen does not support half type yet";
-  return false;
+  mutex_lock lock{dnn_handle_mutex_};
+  auto status = wrap::miopenSetStream(parent_, ToHandle(dnn_handle_),
+                                     AsROCMStreamValue(stream));
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "failed to set stream for miopen handle: " << ToString(status);
+    return false;
+  }
+
+  // Alpha is the scaling factor for input.
+  float alpha = 1.0;
+  // Beta is the scaling factor for output.
+  float beta = 0.0;
+
+  ScopedTensorDescriptor src_desc{parent_, input_dimensions, miopenHalf};
+  ScopedTensorDescriptor dest_desc{parent_, output_dimensions,
+                                   miopenHalf};
+  ScopedPoolingDescriptor pooling_desc{parent_, pooling_dimensions};
+
+  DeviceMemory<uint8> workspace;
+  size_t workspace_size_in_bytes = 0;
+  status = wrap::miopenPoolingGetWorkSpaceSize(parent_, dest_desc.handle(),
+                                                  &workspace_size_in_bytes);
+
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "failed to obtain workspace size for pooling on stream: "
+               << ToString(status);
+    return false;
+  }
+
+  // Allocate the workspace.
+  if (workspace_size_in_bytes > 0) {
+    assert(workspace_allocator);
+    auto allocated =
+        workspace_allocator->AllocateBytes(stream, workspace_size_in_bytes);
+    if (!allocated.ok() || (workspace = allocated.ValueOrDie()) == nullptr) {
+      LOG(ERROR) << "Failed to allocate pooling workspace";
+      return false;
+    }
+  }
+
+  status = wrap::miopenPoolingForward(
+      parent_, ToHandle(dnn_handle_), pooling_desc.handle(), &alpha,
+      src_desc.handle(), input_data.opaque(), &beta, dest_desc.handle(),
+      output_data->opaque(), true, workspace.opaque(), workspace_size_in_bytes);
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "failed to enqueue forward pooling on stream: "
+               << ToString(status);
+    return false;
+  }
+  return true;
 }
 
 bool MIOpenSupport::DoPoolBackward(
@@ -2024,8 +2949,95 @@ bool MIOpenSupport::DoPoolBackward(
     const DeviceMemory<Eigen::half>& input_diff_data,
     DeviceMemory<Eigen::half>* output_diff_data,
     ScratchAllocator* workspace_allocator) {
-  LOG(ERROR) << "miopen does not support half type yet";
-  return false;
+  mutex_lock lock{dnn_handle_mutex_};
+  auto status = wrap::miopenSetStream(parent_, ToHandle(dnn_handle_),
+                                     AsROCMStreamValue(stream));
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "failed to set stream for miopen handle: " << ToString(status);
+    return false;
+  }
+
+  // Alpha is the scaling factor for input.
+  float alpha = 1.0;
+  // Beta is the scaling factor for output.
+  float beta = 0.0;
+
+  ScopedTensorDescriptor src_desc{parent_, input_dimensions, miopenHalf};
+  ScopedTensorDescriptor dest_desc{parent_, output_dimensions,
+                                   miopenHalf};
+  ScopedPoolingDescriptor pooling_desc{parent_, pooling_dimensions};
+
+  DeviceMemory<uint8> workspace;
+  size_t workspace_size_in_bytes = 0;
+  status = wrap::miopenPoolingGetWorkSpaceSize(parent_, dest_desc.handle(),
+                                                  &workspace_size_in_bytes);
+
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "failed to obtain workspace size for backward pooling on stream: "
+               << ToString(status);
+    return false;
+  }
+
+  // Allocate the workspace.
+  if (workspace_size_in_bytes > 0) {
+    assert(workspace_allocator);
+    auto allocated =
+        workspace_allocator->AllocateBytes(stream, workspace_size_in_bytes);
+    if (!allocated.ok() || (workspace = allocated.ValueOrDie()) == nullptr) {
+      LOG(ERROR) << "Failed to allocate backward pooling workspace";
+      return false;
+    }
+  }
+
+  DeviceMemory<uint8> dest2; // duplicated dest from forward:
+  int dest2_size = 0;
+
+  // miopen requires the strides and dims to be ordered as BDYX.
+  std::vector<int64> dims64 =
+      output_dimensions.full_dims(dnn::DataLayout::kBatchDepthYX);
+
+  // miopen does not use strides and must have 4D tensor.
+  std::vector<int> dims(4);
+
+  std::transform(dims64.cbegin(), dims64.cend(), dims.begin(),
+                 &CheckedNarrowing<int64, int>);
+
+  dest2_size = dims[0] * dims[1] * dims[2] * dims[3] * sizeof(miopenHalf); 
+
+  if (dest2_size > 0) {
+    assert(workspace_allocator);
+    auto allocated = workspace_allocator->AllocateBytes(stream, dest2_size);
+    if (!allocated.ok() || (dest2 = allocated.ValueOrDie()) == nullptr) {
+      LOG(ERROR) << "Failed to allocate backward pooling workspace";
+      return false;
+    }
+  } else {
+    LOG(ERROR) << "Failed to calcuate tensor size to chain forward and backward pooling";
+  }
+
+  status = wrap::miopenPoolingForward(
+      parent_, ToHandle(dnn_handle_), pooling_desc.handle(), &alpha,
+      src_desc.handle(), input_data.opaque(), &beta, dest_desc.handle(),
+      dest2.opaque(), true, workspace.opaque(), workspace_size_in_bytes);
+
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "failed to enqueue forward pooling (before backward) on stream: "
+               << ToString(status);
+    return false;
+  }
+ 
+  status = wrap::miopenPoolingBackward(
+      parent_, ToHandle(dnn_handle_), pooling_desc.handle(), &alpha,
+      dest_desc.handle(), dest2.opaque(), dest_desc.handle(),
+      input_diff_data.opaque(), src_desc.handle(), input_data.opaque(), &beta,
+      src_desc.handle(), output_diff_data->opaque(), workspace.opaque());
+
+  if (status != miopenStatusSuccess) {
+    LOG(ERROR) << "failed to enqueue backward pooling on stream: "
+               << ToString(status);
+    return false;
+  }
+  return true;
 }
 
 bool MIOpenSupport::DoNormalize(

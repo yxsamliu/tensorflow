@@ -26,6 +26,8 @@ depending on the python version.
 @@assert_equal_graph_def
 @@get_temp_dir
 @@is_built_with_cuda
+@@is_built_with_rocm
+@@is_built_with_gpu_support
 @@is_gpu_available
 @@gpu_device_name
 @@compute_gradient
@@ -102,11 +104,37 @@ def is_built_with_cuda():
   return _test_util.IsGoogleCudaEnabled()
 
 
+def is_built_with_rocm():
+  """Returns whether TensorFlow was built with ROCm (GPU) support."""
+  return _test_util.IsBuiltWithROCm()
+
+
+def is_built_with_gpu_support():
+  """Returns whether TensorFlow was built with GPU (either CUDA or ROCm) support.
+  """
+  return is_built_with_cuda() or is_built_with_rocm()
+
+
 def is_gpu_available(cuda_only=False):
   """Returns whether TensorFlow can access a GPU.
 
   Args:
-    cuda_only: limit the search to CUDA gpus.
+    cuda_only: limit the search to either CUDA or ROCm gpus.
+               
+  Note that the keyword arg name "cuda_only" is misleading (since routine will 
+  return true when a GPU device is available irrespective of whether TF was 
+  built with CUDA support or ROCm support. However no changes there because
+
+  ++ Changing the name "cuda_only" to something more generic would break 
+     backward compatibility
+
+  ++ Adding an equivalent "rocm_only" would require the implementation check 
+     the build type. This in turn would require doing the same for CUDA and thus
+     potentially break backward compatibility
+
+  ++ Adding a new "cuda_or_rocm_only" would not break backward compatibility, but
+     would require most (if not all) callers to update the call to use 
+     "cuda_or_rocm_only" instead of "cuda_only"
 
   Returns:
     True iff a gpu device of the requested kind is available.

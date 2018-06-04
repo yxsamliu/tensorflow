@@ -19,9 +19,6 @@ limitations under the License.
 
 #define EIGEN_USE_GPU
 
-#if TENSORFLOW_USE_ROCM
-#define EIGEN_USE_HIP
-#endif
 
 #include "tensorflow/core/kernels/crop_and_resize_op.h"
 
@@ -447,7 +444,7 @@ struct CropAndResizeBackpropBoxes<GPUDevice, T> {
   template struct CropAndResizeBackpropImage<GPUDevice, T>; \
   template struct CropAndResizeBackpropBoxes<GPUDevice, T>;
 
-TF_CALL_GPU_NUMBER_TYPES(DEFINE_GPU_SPECS);
+TF_CALL_GPU_NUMBER_TYPES_NO_HALF(DEFINE_GPU_SPECS);
 
 #undef DEFINE_GPU_SPECS
 
