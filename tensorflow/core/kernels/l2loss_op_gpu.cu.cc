@@ -32,4 +32,3 @@ template struct functor::L2Loss<GPUDevice, Eigen::half>;
 }  // namespace tensorflow
 
 #endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-

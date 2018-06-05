@@ -117,6 +117,6 @@ class RcclManager {
 
 }  // namespace tensorflow
 
-#endif  // GOOGLE_CUDA
+#endif  // TENSORFLOW_USE_ROCM
 
 #endif  // THIRD_PARTY_TENSORFLOW_CORE_KERNELS_RCCL_COMMUNICATOR_H_

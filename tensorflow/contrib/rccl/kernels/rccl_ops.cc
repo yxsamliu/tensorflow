@@ -158,4 +158,4 @@ REGISTER_KERNEL_BUILDER(
 
 }  // namespace tensorflow
 
-#endif  // GOOGLE_CUDA
+#endif  // TENSORFLOW_USE_ROCM
