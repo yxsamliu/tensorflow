@@ -123,6 +123,7 @@ void EncodeParamAttr(rtg::instruction&, NameAttrList&, Converter&);
 void DecodeActivationAttr(const NameAttrList&, Converter*, string&);
 void DecodeConstAttr(const NameAttrList&, Converter*, string&);
 void DecodeConvolutionAttr(const NameAttrList&, Converter*, string&);
+void DecodeInputAttr(T_RTG_INST_V& inputs, const NameAttrList& func, Converter* convert);
 void DecodeParamAttr(const NameAttrList&, Converter*, string&); 
  
 } // namspace convert

@@ -401,7 +401,10 @@ void EncodeConvolutionAttr(rtg::instruction& ins, NameAttrList& attrs, Converter
 }
 
 void DecodeActivationAttr(const NameAttrList& func, Converter* convert, string&prefix) {
-
+    string name = func.name();
+    T_RTG_INST_V inputs;
+    DecodeInputAttr(inputs, func, convert);
+    convert->instructions[name] = convert->program->add_instruction(rtg::activation{"relu"}, inputs);    
 }
 
 void DecodeConstAttr(const NameAttrList& func, Converter* convert, string& prefix) {
@@ -437,15 +440,19 @@ void DecodeConstAttr(const NameAttrList& func, Converter* convert, string& prefi
 
 void DecodeConvolutionAttr(const NameAttrList& func, Converter* convert, string& prefix) {
     string name = func.name();
+    T_RTG_INST_V inputs;
+    DecodeInputAttr(inputs, func, convert);
+#if 0    
     auto map = func.attr();
     int32 num_of_inputs = map.at("num_inputs").i();
-    T_RTG_INST_V inputs;
+    
     for (int i = 0; i < num_of_inputs; ++i) {
         string input_name = "input" + std::to_string(i);
         string arg_name = map.at(input_name).s();
-        CHECK(convert->instructions.find(arg_name) != convert->instructions.end()) << "Iput no found";
+        CHECK(convert->instructions.find(arg_name) != convert->instructions.end()) << "Input no found";
         inputs.push_back(convert->instructions[arg_name]);
     }
+#endif    
     rtg::convolution op;
     // get padding, strides, dilations.
     convert->instructions[name] = convert->program->add_instruction(op, inputs);
@@ -456,6 +463,18 @@ void DecodeParamAttr(const NameAttrList& func, Converter* convert, string& prefi
     const rtg::shape shape = convert->getAttrShape(func);
     string orig_name = convert->substract_prefix(name, prefix);
     convert->instructions[name] = convert->program->add_parameter(orig_name, shape);
+}
+
+void DecodeInputAttr(T_RTG_INST_V& inputs, const NameAttrList& func, Converter* convert)
+{
+    auto map = func.attr();
+    int32 num_of_inputs = map.at("num_inputs").i();
+    for (int i = 0; i < num_of_inputs; ++i) {
+        string input_name = "input" + std::to_string(i);
+        string arg_name = map.at(input_name).s();
+        CHECK(convert->instructions.find(arg_name) != convert->instructions.end()) << "Input no found";
+        inputs.push_back(convert->instructions[arg_name]);
+    }
 }
 
 Status BuildLaunchNode(std::unique_ptr<Graph>* g, Cluster& cluster, Converter& convert, string& name)
